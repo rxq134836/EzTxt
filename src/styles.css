@@ -1,0 +1,720 @@
+/* =========== Emil 风格：6 套配色变量 =========== */
+/* 默认（amber 琥珀）作为 :root fallback，其他主题用 [data-theme] 覆盖 */
+
+:root {
+  /* 非主题变量（所有主题共用） */
+  --radius: 14px;
+  --shadow: 0 18px 40px rgba(60, 50, 20, 0.25), 0 2px 6px rgba(60, 50, 20, 0.14);
+  --shadow-mini: 0 8px 20px rgba(60, 50, 20, 0.2);
+  --danger: #d9534f;
+  --ok: #6dbe45;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* 主题色 —— 默认 amber（琥珀），保持向后兼容 */
+  --bg: rgba(250, 245, 225, 0.86);
+  --bg-solid: #FAF5E1;
+  --accent: #e0a82e;
+  --accent-rgb: 224, 168, 46;
+  --ink: #4a3f24;
+  --ink-rgb: 74, 63, 36;
+  --ink-soft: #7a6e4f;
+  --ink-mute: #b3a479;
+  --card-bg: rgba(255, 255, 255, 0.55);
+  --card-bg-hover: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(var(--ink-rgb), 0.08);
+  --line: rgba(var(--ink-rgb), 0.12);
+  --line-soft: rgba(var(--ink-rgb), 0.06);
+  --accent-soft: rgba(var(--accent-rgb), 0.18);
+}
+
+/* 主题 1：amber（琥珀 / 默认）*/
+/* (默认值已在 :root，这里只放显式块) */
+[data-theme="amber"] {
+  --bg: rgba(250, 245, 225, 0.86);
+  --bg-solid: #FAF5E1;
+  --accent: #e0a82e;
+  --accent-rgb: 224, 168, 46;
+  --ink: #4a3f24;
+  --ink-rgb: 74, 63, 36;
+  --ink-soft: #7a6e4f;
+  --ink-mute: #b3a479;
+}
+
+/* 主题 2：blue（深蓝 + 米，来自 Loyel 图 1 #2B5275）*/
+[data-theme="blue"] {
+  --bg: rgba(255, 251, 189, 0.86);
+  --bg-solid: #FFFBBD;
+  --accent: #2B5275;
+  --accent-rgb: 43, 82, 117;
+  --ink: #1a2a3a;
+  --ink-rgb: 26, 42, 58;
+  --ink-soft: #4a6074;
+  --ink-mute: #8fa0a8;
+}
+
+/* 主题 3：olive（墨绿 + 米，来自 Loyel 图 5 #4D5E30）*/
+[data-theme="olive"] {
+  --bg: rgba(245, 240, 212, 0.86);
+  --bg-solid: #F5F0D4;
+  --accent: #4D5E30;
+  --accent-rgb: 77, 94, 48;
+  --ink: #2a3319;
+  --ink-rgb: 42, 51, 25;
+  --ink-soft: #576140;
+  --ink-mute: #8e9a76;
+}
+
+/* 主题 4：terracotta（砖红 + 米，来自 Loyel 图 1 #D16647）*/
+[data-theme="terracotta"] {
+  --bg: rgba(245, 234, 212, 0.86);
+  --bg-solid: #F5EAD4;
+  --accent: #D16647;
+  --accent-rgb: 209, 102, 71;
+  --ink: #3d2a1a;
+  --ink-rgb: 61, 42, 26;
+  --ink-soft: #7a5a3d;
+  --ink-mute: #b08a66;
+}
+
+/* 主题 5：gold（棕金 + 米，来自 Loyel 图 2 #BCA052）*/
+[data-theme="gold"] {
+  --bg: rgba(245, 234, 212, 0.86);
+  --bg-solid: #F5EAD4;
+  --accent: #BCA052;
+  --accent-rgb: 188, 160, 82;
+  --ink: #4A3C2B;
+  --ink-rgb: 74, 60, 43;
+  --ink-soft: #7a6545;
+  --ink-mute: #a89371;
+}
+
+/* 主题 6：rose（酒红 + 粉米，来自 Loyel 图 3 #954B44）*/
+[data-theme="rose"] {
+  --bg: rgba(245, 229, 224, 0.86);
+  --bg-solid: #F5E5E0;
+  --accent: #954B44;
+  --accent-rgb: 149, 75, 68;
+  --ink: #3a1f1b;
+  --ink-rgb: 58, 31, 27;
+  --ink-soft: #6e443d;
+  --ink-mute: #a8766e;
+}
+
+/* 主题 7：sage（草绿 + 米，来自 Loyel 图 1 #A69F55 调整为 #4D5E30 同色系）*/
+[data-theme="sage"] {
+  --bg: rgba(245, 240, 212, 0.86);
+  --bg-solid: #F5F0D4;
+  --accent: #A68329;
+  --accent-rgb: 166, 131, 41;
+  --ink: #3a2f14;
+  --ink-rgb: 58, 47, 20;
+  --ink-soft: #6e5a2a;
+  --ink-mute: #a08850;
+}
+
+* { box-sizing: border-box; }
+*:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+    "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+  color: var(--ink);
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* ========= Header ========= */
+.header {
+  -webkit-app-region: drag;
+  app-region: drag;
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+  padding: 8px 10px 6px 12px;
+}
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.app-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0.3px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.title-summary {
+  color: var(--ink-mute);
+  font-weight: 500;
+  font-size: 13px;
+  margin-left: 2px;
+}
+.window-controls {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.ctrl-btn {
+  width: 26px; height: 26px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Emil: color hover uses easing, transform uses ease-out for responsive feel */
+  transition: background 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+}
+.ctrl-btn:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
+.ctrl-btn:active { transform: scale(0.97); }
+.ctrl-btn.pin-btn.is-active { background: var(--accent); color: #fff; }
+.ctrl-btn.pin-btn.is-active:hover { background: #c49224; }
+.ctrl-btn.close-btn:hover { background: var(--danger); color: #fff; }
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-top: 6px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.tb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 9px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 12px;
+  /* Emil: color hover uses ease, transform uses ease-out */
+  transition: background 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+}
+.tb-btn:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
+.tb-btn:active { transform: scale(0.97); }
+.tb-btn.danger:hover { background: rgba(217, 83, 79, 0.15); color: var(--danger); }
+.tb-btn.is-active { background: var(--accent-soft); color: var(--accent); }
+.tb-sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+
+/* Search bar */
+.searchbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 2px 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.searchbar.hidden { display: none; }
+.search-input {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 10px;
+  background: rgba(255,255,255,0.7);
+  font-size: 13px;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.search-input:focus { border-color: var(--accent); background: #fff; }
+.search-clear {
+  width: 24px; height: 24px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+}
+.search-clear:hover { background: rgba(255,255,255,0.7); }
+
+/* ========= Body / list ========= */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 10px 12px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.body::-webkit-scrollbar { width: 8px; }
+.body::-webkit-scrollbar-thumb { background: rgba(var(--ink-rgb), 0.22); border-radius: 4px; }
+.body::-webkit-scrollbar-thumb:hover { background: rgba(var(--ink-rgb), 0.4); }
+.body::-webkit-scrollbar-track { background: transparent; }
+
+.task-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ========= Task card ========= */
+.task-card {
+  --selection: var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  padding: 1px 6px 1px 4px;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  position: relative;
+  cursor: default;
+}
+.task-card:hover { background: var(--card-bg-hover); }
+.task-card.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: rgba(255, 255, 255, 0.9);
+}
+.task-card.is-divider {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: default;
+}
+.task-card.is-divider hr {
+  border: none;
+  border-top: 1px dashed var(--line);
+  margin: 10px 4px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  min-height: 28px;
+}
+
+/* Checkbox (custom) */
+.card-checkbox {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border: 1.5px solid var(--ink-mute);
+  border-radius: 5px;
+  background: rgba(255,255,255,0.6);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, transform 120ms var(--ease-out);
+  color: transparent;
+  font-size: 12px;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.card-checkbox:hover { border-color: var(--accent); background: var(--accent-soft); }
+.card-checkbox:active { transform: scale(0.92); }
+.card-checkbox.is-checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.card-checkbox.is-checked::before {
+  content: "✓";
+  font-weight: 700;
+}
+
+/* Title */
+.card-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--ink);
+  font-weight: 600;
+  padding: 3px 2px;
+  border-radius: 4px;
+  transition: background 0.12s, color 0.12s, font-weight 0.12s;
+  user-select: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.card-title::placeholder { color: var(--ink-mute); font-weight: 500; }
+.card-title:focus {
+  background: rgba(255,255,255,0.8);
+  font-weight: 600;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+.task-card.is-done .card-title {
+  color: var(--ink-mute);
+  text-decoration: line-through;
+  font-weight: 500;
+}
+.task-card.is-done .card-title:focus { color: var(--ink); text-decoration: none; font-weight: 600; }
+
+/* Expand toggle (right side of row) */
+.card-toggle {
+  flex: 0 0 auto;
+  width: 22px; height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-mute);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Emil: rotation/drawer-style motion uses ease-out curve */
+  transition: background 120ms ease, color 120ms ease, transform 180ms var(--ease-out);
+  opacity: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  transform-origin: center;
+}
+.task-card:hover .card-toggle { opacity: 1; }
+.card-toggle:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
+.card-toggle:active { transform: rotate(90deg) scale(0.95); }
+.card-toggle.is-expanded { transform: rotate(90deg); color: var(--accent); }
+.card-toggle svg { display: block; }
+
+/* Collapsed note hint — collapsed 态完全隐藏，hover 时才出现 */
+.card-note-meta {
+  opacity: 0;
+  height: 0;
+  padding: 0;
+  overflow: hidden;
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--ink-mute);
+  border-radius: 4px;
+  max-width: 40%;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  user-select: none;
+  transition: opacity 120ms ease, height 150ms ease, padding 120ms ease, background 120ms ease, color 120ms ease;
+}
+.task-card:hover .card-note-meta {
+  opacity: 1;
+  height: auto;
+  padding: 1px 6px;
+  overflow: hidden;
+}
+.card-note-meta:hover { background: var(--accent-soft); color: var(--ink-soft); }
+.card-note-meta:active { transform: scale(0.97); }
+.card-note-meta.is-empty { font-style: italic; }
+
+/* Expanded note editor area — 单栏 Typora 风格，只有一个 textarea */
+.card-note {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 220ms var(--ease-out);
+  padding: 0 4px 6px 26px;
+}
+.task-card.is-expanded .card-note {
+  max-height: 520px;
+}
+
+.card-editor {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.75);
+  color: var(--ink);
+  font-family: "SFMono-Regular", "Consolas", "Cascadia Code", "Microsoft YaHei", monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  resize: vertical;
+  min-height: 80px;
+  max-height: 420px;
+  outline: none;
+  transition: border-color 0.12s;
+  user-select: text;
+}
+.card-editor:focus { border-color: var(--accent); }
+.card-editor::placeholder { color: var(--ink-mute); font-style: italic; }
+
+/* ========= Empty state ========= */
+.empty-tip {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--ink-mute);
+}
+.empty-tip.hidden { display: none; }
+.empty-tip p { margin: 0 0 12px; }
+.add-empty-btn {
+  border: 1px dashed var(--accent);
+  background: rgba(255,255,255,0.6);
+  color: var(--accent);
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+.add-empty-btn:hover { background: var(--accent); color: #fff; }
+
+/* ========= Status bar ========= */
+.statusbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 14px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  border-top: 1px solid var(--line-soft);
+  background: rgba(255,255,255,0.35);
+  -webkit-app-region: drag;
+  app-region: drag;
+  user-select: none;
+}
+.statusbar .spacer { flex: 1 1 auto; }
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-mute);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.status-dot.dirty { background: var(--accent); }
+.status-dot.saving { background: #5aa9e6; animation: pulse 0.9s ease-in-out infinite; }
+.status-dot.saved { background: var(--ok); box-shadow: 0 0 6px rgba(109, 190, 69, 0.7); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+.save-time { font-variant-numeric: tabular-nums; }
+
+/* ========= Help panel ========= */
+.help-panel {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 25, 10, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.help-panel.hidden { display: none; }
+.help-card {
+  background: var(--bg-solid);
+  border: 1px solid rgba(255,255,255,0.7);
+  border-radius: 12px;
+  padding: 16px 20px;
+  max-width: 360px;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+.help-card h3 { margin: 0 0 10px; font-size: 15px; }
+.help-card ul { margin: 0; padding-left: 18px; }
+.help-card li { margin: 4px 0; font-size: 13px; }
+.help-card kbd {
+  display: inline-block;
+  padding: 1px 5px;
+  background: rgba(var(--ink-rgb), 0.12);
+  border: 1px solid rgba(var(--ink-rgb), 0.18);
+  border-radius: 3px;
+  font-family: "SFMono-Regular", "Consolas", monospace;
+  font-size: 11px;
+  margin: 0 1px;
+  color: var(--ink);
+}
+.help-note {
+  margin: 12px 0 0;
+  color: var(--ink-mute);
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ========= hidden ========= */
+.hidden { display: none !important; }
+
+/* Filter dimmer */
+.task-card.is-filtered-out {
+  display: none;
+}
+
+/* ========= 背景图层（半透明 + blur） ========= */
+.bg-image-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+.bg-image-layer.has-image { opacity: 1; }
+
+/* ========= 主题下拉面板 ========= */
+.theme-panel {
+  position: fixed;
+  top: 112px;
+  left: 16px;
+  right: 16px;
+  z-index: 200;
+  padding: 4px;
+}
+.theme-card {
+  background: var(--bg);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.theme-card h3 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.theme-card h3 + h3 { margin-top: 14px; }
+
+.theme-swatches {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.theme-swatch {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid rgba(var(--ink-rgb), 0.15);
+  cursor: pointer;
+  transition: transform 120ms var(--ease-out), border-color 120ms ease;
+  flex-shrink: 0;
+}
+.theme-swatch:hover { transform: scale(1.08); }
+.theme-swatch.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.3);
+}
+.theme-swatch .swatch-accent {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(0,0,0,0.1);
+}
+
+.bg-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.bg-controls .tb-btn { align-self: flex-start; }
+.bg-opacity-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.bg-opacity-wrap label {
+  font-size: 12px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+.bg-opacity-wrap input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  max-width: 160px;
+}
+
+/* ========= Mini bar（贴边态） ========= */
+/* mini 态只显示 miniBar，隐藏主 app UI */
+body.is-mini {
+  background: transparent;
+}
+body.is-mini .app {
+  display: none !important;
+}
+
+.mini-bar {
+  position: fixed;
+  z-index: 9999;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  cursor: grab;
+  box-shadow: var(--shadow-mini);
+  user-select: none;
+  -webkit-app-region: drag;
+  app-region: drag;
+  border: none;
+  padding: 0;
+  transition: transform 150ms var(--ease-out);
+}
+.mini-bar:hover { transform: scale(1.06); }
+.mini-bar:active { transform: scale(0.94); }
+.mini-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.6);
+  margin-bottom: 2px;
+}
+.mini-count {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+.mini-label {
+  font-size: 9px;
+  opacity: 0.7;
+  margin-top: 1px;
+}

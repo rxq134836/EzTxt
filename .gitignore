@@ -1,0 +1,25 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+build/
+
+# Electron 调试
+out/
+
+# 日志
+*.log
+npm-debug.log*
+
+# 编辑器
+.vscode/
+.idea/
+
+# 系统文件
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# 运行时生成的本地数据（开发时）
+storage/

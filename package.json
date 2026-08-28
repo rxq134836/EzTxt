@@ -1,0 +1,57 @@
+{
+  "name": "eztxt",
+  "version": "1.0.0",
+  "description": "桌面便签笔记系统 - 基于 Electron 的本地 Markdown 便签",
+  "main": "src/main.js",
+  "author": "eztxt",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --enable-logging",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable",
+    "dist:nsis": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "marked": "^13.0.3"
+  },
+  "build": {
+    "appId": "com.eztxt.stickynote",
+    "productName": "EzTxt",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "EzTxt 便签"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  }
+}

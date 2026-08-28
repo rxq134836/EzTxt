@@ -1,0 +1,898 @@
+'use strict';
+
+/**
+ * EzTxt 任务列表便签 —— 渲染进程逻辑
+ *
+ * 关键设计：
+ *  1. 一次性 renderList() 建立 DOM，后续只通过增量函数（updateCardTitle/Note/Done/...）
+ *     修改受影响卡片，避免每次输入全量 innerHTML 重建毁 textarea 焦点。
+ *  2. 事件委托：#taskList 上一个 listener，通过 data-action + data-id 分发。
+ *  3. 懒渲染：只有卡片处于 expanded 状态时才实时 marked.parse 预览；
+ *     折叠态仅用截断的 Markdown 源文本做 meta 摘要（不 parse）。
+ *  4. 全局防抖保存（AUTOSAVE_DELAY=2s），Ctrl+S 立即保存，关闭前尽力保存一次。
+ */
+(function () {
+  const api = window.api;
+
+  // ===== 常量 =====
+  const AUTOSAVE_DELAY = 2000;
+
+  // ===== DOM 引用 =====
+  const $ = (sel) => document.querySelector(sel);
+  const taskListEl = $('#taskList');
+  const emptyTipEl = $('#emptyTip');
+  const titleSummaryEl = $('#titleSummary');
+  const saveTimeEl = $('#saveTime');
+  const statusTextEl = $('#statusText');
+  const statusDotEl = $('#statusDot');
+  const pinBtn = $('#pinBtn');
+  const minBtn = $('#minBtn');
+  const shrinkBtn = $('#shrinkBtn');
+  const closeBtn = $('#closeBtn');
+  const searchbarEl = $('#searchbar');
+  const searchInputEl = $('#searchInput');
+  const searchClearBtn = $('#searchClear');
+  const btnSearch = $('#btnSearch');
+  const btnDelete = $('#btnDelete');
+  const btnDivider = $('#btnDivider');
+  const btnAdd = $('#btnAdd');
+  const btnAddEmpty = $('#btnAddEmpty');
+  const btnHelp = $('#btnHelp');
+  const helpPanel = $('#helpPanel');
+  const btnTheme = $('#btnTheme');
+  const themePanel = $('#themePanel');
+  const themeSwatches = $('#themeSwatches');
+  const miniBar = $('#miniBar');
+  const miniCount = $('#miniCount');
+  const bgImageLayer = $('#bgImageLayer');
+  const btnUploadBg = $('#btnUploadBg');
+  const btnRemoveBg = $('#btnRemoveBg');
+  const bgOpacitySlider = $('#bgOpacity');
+  const bgFileInput = $('#bgFileInput');
+
+  // ===== 应用状态 =====
+  /**
+   * items:  [{ id, title, done, note, expanded, createdAt, updatedAt, _idx }]
+   * 注意：_idx 是保存到主进程前的位置索引，渲染层会把它删掉再保存。
+   */
+  let items = [];
+  let docUpdatedAt = null;
+  let isDirty = false;
+  let saveTimer = null;
+  let activeSearch = ''; // 当前过滤关键字
+  let selectedId = null; // 选中的卡片（用于 Backspace 删除）
+
+  // ===== 主题常量 & 设置状态 =====
+  const THEMES = [
+    { key: 'amber',      name: '琥珀', accent: '#e0a82e', bg: '#FAF5E1', ink: '#4a3f24' },
+    { key: 'blue',       name: '深蓝', accent: '#2B5275', bg: '#FFFBBD', ink: '#1a2a3a' },
+    { key: 'olive',      name: '墨绿', accent: '#4D5E30', bg: '#F5F0D4', ink: '#2a3319' },
+    { key: 'terracotta', name: '砖红', accent: '#D16647', bg: '#F5EAD4', ink: '#3d2a1a' },
+    { key: 'gold',       name: '棕金', accent: '#BCA052', bg: '#F5EAD4', ink: '#4A3C2B' },
+    { key: 'rose',       name: '酒红', accent: '#954B44', bg: '#F5E5E0', ink: '#3a1f1b' },
+    { key: 'sage',       name: '草绿', accent: '#A68329', bg: '#F5F0D4', ink: '#3a2f14' }
+  ];
+  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35 };
+  let isMiniMode = false;
+  let isLoadingSettings = false;
+
+  function uid() {
+    // 渲染层生成 id 用时间戳+随机，主进程再兜底换 crypto.randomBytes
+    return (
+      Date.now().toString(36) +
+      Math.random().toString(36).slice(2, 8)
+    );
+  }
+
+  // ===== 时间格式化 =====
+  function formatTime(iso) {
+    if (!iso) return '尚未保存';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '尚未保存';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `已保存 ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  // ===== 状态指示 =====
+  function setStatus(state, text) {
+    statusDotEl.classList.remove('dirty', 'saving', 'saved');
+    if (state) statusDotEl.classList.add(state);
+    if (text != null) statusTextEl.textContent = text;
+  }
+  function markDirty() {
+    if (isDirty) return;
+    isDirty = true;
+    setStatus('dirty', '未保存的修改');
+  }
+
+  // ============================================================
+  //  DOM 构建（一次性）
+  // ============================================================
+
+  /**
+   * 为单张卡片创建 DOM 结构。此时 note 是折叠的，不做预览。
+   * 只有 toggle 按钮、title input、checkbox、note-meta、note-area（textarea + 空的 preview）。
+   */
+  function createCardEl(item) {
+    const li = document.createElement('li');
+    li.className = 'task-card';
+    if (item.done) li.classList.add('is-done');
+    if (item.expanded) li.classList.add('is-expanded');
+    li.dataset.id = item.id;
+    // divider 卡片？我们用 data-type="divider" 标记而不是在 items 数组里加 type 字段
+    // 这样主进程数据结构保持干净。如果 title === '__DIVIDER__' 则渲染为分割线
+    if (item.title === '__DIVIDER__') {
+      li.classList.add('is-divider');
+      li.dataset.type = 'divider';
+      li.innerHTML = '<hr/>';
+      return li;
+    }
+
+    li.innerHTML = `
+      <div class="task-row">
+        <div class="card-checkbox${item.done ? ' is-checked' : ''}"
+             data-action="toggle-done" role="checkbox" aria-checked="${item.done}"></div>
+        <input class="card-title" data-action="edit-title"
+               type="text" value="${escapeAttr(item.title)}"
+               placeholder="新任务…" spellcheck="false" />
+        <span class="card-note-meta${!item.note ? ' is-empty' : ''}"
+              data-action="toggle-expand" title="点击展开备注">${renderNoteMeta(item.note)}</span>
+        <button class="card-toggle${item.expanded ? ' is-expanded' : ''}"
+                data-action="toggle-expand" title="展开备注" type="button" aria-label="展开备注">
+          <svg viewBox="0 0 16 16" width="12" height="12"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <div class="card-note">
+        <textarea class="card-editor" data-action="edit-note"
+                  placeholder="在此输入 Markdown 备注… (Ctrl+B 加粗 / Ctrl+I 斜体 / Ctrl+K 行内代码)" spellcheck="false"
+                  wrap="soft">${escapeTextarea(item.note || '')}</textarea>
+      </div>
+    `;
+    return li;
+  }
+
+  function escapeAttr(s) {
+    return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function escapeTextarea(s) {
+    // textarea 的 value 不需要转义 "，但需要把 </textarea> 转掉
+    return String(s || '').replace(/<\/textarea>/gi, '&lt;/textarea&gt;');
+  }
+
+  /**
+   * 折叠态摘要：截断 Markdown 源文本（不 parse）。
+   */
+  function renderNoteMeta(note) {
+    const s = (note || '').replace(/\s+/g, ' ').trim();
+    if (!s) return '+ 添加备注';
+    return s.length > 32 ? s.slice(0, 32) + '…' : s;
+  }
+
+  /**
+   * 首次加载：清空 list，逐张 createCardEl 追加。
+   */
+  function renderList() {
+    taskListEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (const item of items) {
+      frag.appendChild(createCardEl(item));
+    }
+    taskListEl.appendChild(frag);
+
+    updateSummary();
+    applyFilter();
+    updateEmptyTip();
+  }
+
+  // ============================================================
+  //  增量 DOM 更新
+  // ============================================================
+
+  function cardElById(id) {
+    return taskListEl.querySelector(`.task-card[data-id="${id}"]`);
+  }
+
+  function removeCardEl(id) {
+    const el = cardElById(id);
+    if (el) el.remove();
+  }
+
+  function updateSummary() {
+    const taskCount = items.filter((it) => it.title !== '__DIVIDER__').length;
+    const doneCount = items.filter((it) => it.title !== '__DIVIDER__' && it.done).length;
+    titleSummaryEl.textContent = `· ${taskCount}项 · 已完成${doneCount}`;
+    updateMiniCount();
+  }
+
+  function updateEmptyTip() {
+    const visibleTask = taskListEl.querySelector('.task-card:not(.is-filtered-out):not(.is-divider)');
+    emptyTipEl.classList.toggle('hidden', !!visibleTask);
+  }
+
+  /**
+   * 刷新某张卡片的 meta 摘要（折叠态显示的一行文本）。
+   */
+  function updateCardMeta(id) {
+    const el = cardElById(id);
+    if (!el) return;
+    const item = findItem(id);
+    if (!item) return;
+    const meta = el.querySelector('.card-note-meta');
+    if (!meta) return;
+    meta.textContent = renderNoteMeta(item.note);
+    meta.classList.toggle('is-empty', !item.note);
+  }
+
+  function updateCardTitleDom(id) {
+    const el = cardElById(id);
+    if (!el) return;
+    const item = findItem(id);
+    if (!item) return;
+    const titleInput = el.querySelector('.card-title');
+    if (titleInput && titleInput.value !== item.title) {
+      titleInput.value = item.title;
+    }
+  }
+
+  function updateCardDoneDom(id) {
+    const el = cardElById(id);
+    if (!el) return;
+    const item = findItem(id);
+    if (!item) return;
+    el.classList.toggle('is-done', !!item.done);
+    const cb = el.querySelector('.card-checkbox');
+    if (cb) {
+      cb.classList.toggle('is-checked', !!item.done);
+      cb.setAttribute('aria-checked', String(!!item.done));
+    }
+  }
+
+  function updateCardExpandedDom(id) {
+    const el = cardElById(id);
+    if (!el) return;
+    const item = findItem(id);
+    if (!item) return;
+    el.classList.toggle('is-expanded', !!item.expanded);
+    const tb = el.querySelector('.card-toggle');
+    if (tb) tb.classList.toggle('is-expanded', !!item.expanded);
+  }
+
+  function updateSelection() {
+    taskListEl.querySelectorAll('.task-card').forEach((el) => {
+      const id = el.dataset.id;
+      el.classList.toggle('is-selected', id === selectedId);
+    });
+  }
+
+  function applyFilter() {
+    const q = activeSearch.trim().toLowerCase();
+    let anyVisible = false;
+    for (const item of items) {
+      if (item.title === '__DIVIDER__') continue;
+      const el = cardElById(item.id);
+      if (!el) continue;
+      if (!q) {
+        el.classList.remove('is-filtered-out');
+        if (!anyVisible) anyVisible = true;
+        continue;
+      }
+      const hay = ((item.title || '') + ' ' + (item.note || '')).toLowerCase();
+      const match = hay.includes(q);
+      el.classList.toggle('is-filtered-out', !match);
+      if (match) anyVisible = true;
+    }
+    updateEmptyTip();
+  }
+
+  // ============================================================
+  //  数据操作（都要 markDirty + scheduleAutosave + 刷新对应 DOM）
+  // ============================================================
+
+  function findItem(id) {
+    return items.find((it) => it.id === id);
+  }
+
+  function updateItem(id, patch) {
+    const it = findItem(id);
+    if (!it) return;
+    Object.assign(it, patch);
+    markDirty();
+    scheduleAutosave();
+  }
+
+  function toggleDone(id) {
+    const it = findItem(id);
+    if (!it) return;
+    updateItem(id, { done: !it.done, updatedAt: new Date().toISOString() });
+    updateCardDoneDom(id);
+    updateSummary();
+  }
+
+  function updateTitle(id, title) {
+    updateItem(id, { title: title, updatedAt: new Date().toISOString() });
+    updateSummary();
+  }
+
+  function updateNote(id, note) {
+    updateItem(id, { note: note, updatedAt: new Date().toISOString() });
+    updateCardMeta(id);
+  }
+
+  function toggleExpand(id) {
+    const it = findItem(id);
+    if (!it) return;
+    updateItem(id, { expanded: !it.expanded, updatedAt: new Date().toISOString() });
+    updateCardExpandedDom(id);
+  }
+
+  function addTask(title = '', note = '') {
+    const now = new Date().toISOString();
+    const item = {
+      id: uid(),
+      title: title,
+      done: false,
+      note: note,
+      expanded: false,
+      createdAt: now,
+      updatedAt: now
+    };
+    items.push(item);
+    markDirty();
+    scheduleAutosave();
+    // 只追加一个新 DOM 节点（不重渲染整个 list）
+    taskListEl.appendChild(createCardEl(item));
+    updateSummary();
+    applyFilter();
+    updateEmptyTip();
+
+    // 自动 focus 标题
+    requestAnimationFrame(() => {
+      const el = cardElById(item.id);
+      if (el) {
+        const t = el.querySelector('.card-title');
+        if (t) {
+          t.focus();
+          t.setSelectionRange(t.value.length, t.value.length);
+        }
+      }
+    });
+    return item;
+  }
+
+  function addDivider() {
+    const now = new Date().toISOString();
+    const item = {
+      id: uid(),
+      title: '__DIVIDER__',
+      done: false,
+      note: '',
+      expanded: false,
+      createdAt: now,
+      updatedAt: now
+    };
+    items.push(item);
+    markDirty();
+    scheduleAutosave();
+    taskListEl.appendChild(createCardEl(item));
+    updateSummary();
+    applyFilter();
+  }
+
+  function deleteItem(id) {
+    const idx = items.findIndex((it) => it.id === id);
+    if (idx === -1) return;
+    items.splice(idx, 1);
+    markDirty();
+    scheduleAutosave();
+    removeCardEl(id);
+    if (selectedId === id) selectedId = null;
+    updateSelection();
+    updateSummary();
+    applyFilter();
+    updateEmptyTip();
+  }
+
+  function deleteSelected() {
+    if (!selectedId) return;
+    deleteItem(selectedId);
+  }
+
+  // ============================================================
+  //  自动保存
+  // ============================================================
+
+  function scheduleAutosave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(performSave, AUTOSAVE_DELAY);
+  }
+
+  async function performSave() {
+    if (!isDirty) return;
+    saveTimer = null;
+    setStatus('saving', '保存中…');
+    try {
+      const payload = {
+        items: items.map((it) => {
+          const copy = { ...it };
+          delete copy._idx; // 去掉渲染层临时字段
+          return copy;
+        })
+      };
+      const res = await api.saveNote(payload);
+      if (res && res.ok) {
+        docUpdatedAt = res.updatedAt;
+        saveTimeEl.textContent = formatTime(res.updatedAt);
+        isDirty = false;
+        setStatus('saved', '已保存');
+        setTimeout(() => {
+          if (!isDirty) setStatus(null, '就绪');
+        }, 1200);
+      } else {
+        setStatus(null, '保存失败');
+        saveTimeEl.textContent = '保存失败';
+      }
+    } catch (err) {
+      console.error(err);
+      setStatus(null, '保存失败');
+    }
+  }
+
+  function saveNow() {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    if (!isDirty) {
+      setStatus('saved', '已是最新');
+      setTimeout(() => { if (!isDirty) setStatus(null, '就绪'); }, 800);
+      return;
+    }
+    performSave();
+  }
+
+  // ============================================================
+  //  事件委托：#taskList
+  // ============================================================
+
+  /**
+   * 给 textarea 中选中的文本（或光标位置）两侧包裹 Markdown 标记。
+   * 没有选中时，光标落在两个标记之间方便继续打字。
+   */
+  function wrapMark(textarea, mark, id) {
+    const s = textarea.selectionStart;
+    const ed = textarea.selectionEnd;
+    const v = textarea.value;
+    const inner = v.slice(s, ed);
+    const newVal = v.slice(0, s) + mark + inner + mark + v.slice(ed);
+    textarea.value = newVal;
+    // 光标落在开标记之后
+    textarea.selectionStart = s + mark.length;
+    textarea.selectionEnd = s + mark.length + inner.length;
+    updateNote(id, newVal);
+  }
+
+  function onTaskListClick(e) {
+    const target = e.target;
+    const li = target.closest('.task-card');
+    if (!li) return;
+
+    // 选中
+    selectedId = li.dataset.id;
+    updateSelection();
+
+    const actionEl = target.closest('[data-action]');
+    if (!actionEl) return;
+    const action = actionEl.dataset.action;
+    const id = li.dataset.id;
+
+    if (action === 'toggle-done') {
+      toggleDone(id);
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (action === 'toggle-expand') {
+      toggleExpand(id);
+      e.preventDefault();
+      e.stopPropagation();
+    } else if (action === 'edit-title' || action === 'edit-note') {
+      // 不阻止事件，让原生 focus 生效
+    }
+  }
+
+  /**
+   * input/keydown 在子元素触发冒泡到 #taskList 上统一处理。
+   * 这样每张卡片无需单独绑 listener。
+   */
+  function onTaskListInput(e) {
+    const target = e.target;
+    const li = target.closest('.task-card');
+    if (!li) return;
+    const id = li.dataset.id;
+    const action = target.dataset.action;
+
+    if (action === 'edit-title') {
+      const v = target.value;
+      const it = findItem(id);
+      if (!it) return;
+      if (v !== it.title) updateTitle(id, v);
+    } else if (action === 'edit-note') {
+      const v = target.value;
+      const it = findItem(id);
+      if (!it) return;
+      if (v !== it.note) updateNote(id, v);
+    }
+  }
+
+  function onTaskListKeyDown(e) {
+    const target = e.target;
+    const li = target.closest('.task-card');
+    if (!li) return;
+    const id = li.dataset.id;
+    const action = target.dataset.action;
+
+    if (action === 'edit-note') {
+      const t = target;
+      const s = t.selectionStart;
+      const ed = t.selectionEnd;
+      const v = t.value;
+
+      // Tab 缩进
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          const lineStart = v.lastIndexOf('\n', s - 1) + 1;
+          let before = v.slice(lineStart, s);
+          let after = v.slice(s, ed);
+          const indent = before.startsWith('  ') ? 2 : before.startsWith('\t') ? 1 : 0;
+          if (indent > 0) {
+            before = before.slice(indent);
+            const newVal = v.slice(0, lineStart) + before + after + v.slice(ed);
+            t.value = newVal;
+            t.selectionStart = t.selectionEnd = s - indent;
+            updateNote(id, newVal);
+          }
+        } else {
+          const newVal = v.slice(0, s) + '  ' + v.slice(ed);
+          t.value = newVal;
+          t.selectionStart = t.selectionEnd = s + 2;
+          updateNote(id, newVal);
+        }
+      }
+      // Ctrl+B 加粗
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        wrapMark(t, '**', id);
+      }
+      // Ctrl+I 斜体
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
+        e.preventDefault();
+        wrapMark(t, '*', id);
+      }
+      // Ctrl+K 行内代码
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        wrapMark(t, '`', id);
+      }
+    }
+  }
+
+  // ============================================================
+  //  其他全局事件
+  // ============================================================
+
+  function onGlobalKeyDown(e) {
+    // Ctrl+S：立即保存
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      e.preventDefault();
+      saveNow();
+      return;
+    }
+    // Ctrl+N：新建任务
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'n') {
+      e.preventDefault();
+      addTask();
+      return;
+    }
+    // Ctrl+Shift+T：切换置顶
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 't') {
+      e.preventDefault();
+      api.togglePin();
+      return;
+    }
+    // Ctrl+/：帮助
+    if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+      e.preventDefault();
+      toggleHelp();
+      return;
+    }
+    // Backspace：删除选中
+    if (e.key === 'Backspace') {
+      const focusTag = document.activeElement && document.activeElement.tagName;
+      const isEditing = focusTag === 'INPUT' || focusTag === 'TEXTAREA';
+      if (!isEditing && selectedId) {
+        e.preventDefault();
+        deleteSelected();
+      }
+    }
+    // Esc：关闭帮助 / 搜索条 / 主题面板
+    if (e.key === 'Escape') {
+      if (!helpPanel.classList.contains('hidden')) {
+        toggleHelp(false);
+      } else if (!themePanel.classList.contains('hidden')) {
+        toggleThemePanel(false);
+      } else if (!searchbarEl.classList.contains('hidden')) {
+        toggleSearch(false);
+      }
+    }
+  }
+
+  function toggleHelp(force) {
+    const show = typeof force === 'boolean' ? force : helpPanel.classList.contains('hidden');
+    helpPanel.classList.toggle('hidden', !show);
+    if (show) {
+      btnHelp.classList.add('is-active');
+    } else {
+      btnHelp.classList.remove('is-active');
+    }
+  }
+
+  function toggleSearch(force) {
+    const show = typeof force === 'boolean' ? force : searchbarEl.classList.contains('hidden');
+    searchbarEl.classList.toggle('hidden', !show);
+    btnSearch.classList.toggle('is-active', show);
+    if (show) {
+      requestAnimationFrame(() => searchInputEl.focus());
+    } else {
+      activeSearch = '';
+      searchInputEl.value = '';
+      applyFilter();
+    }
+  }
+
+  // ============================================================
+  //  主题 & 设置
+  // ============================================================
+
+  function toggleThemePanel(force) {
+    const show = typeof force === 'boolean' ? force : themePanel.classList.contains('hidden');
+    themePanel.classList.toggle('hidden', !show);
+    btnTheme.classList.toggle('is-active', show);
+  }
+
+  function applyTheme(key) {
+    if (!THEMES.find((t) => t.key === key)) key = 'amber';
+    document.body.dataset.theme = key;
+    settings.theme = key;
+    renderThemeSwatches();
+    api.saveSettings({ theme: key });
+  }
+
+  function renderThemeSwatches() {
+    themeSwatches.innerHTML = '';
+    for (const t of THEMES) {
+      const btn = document.createElement('button');
+      btn.className = 'theme-swatch' + (t.key === settings.theme ? ' is-active' : '');
+      btn.type = 'button';
+      btn.title = t.name;
+      btn.style.background = t.bg;
+      btn.innerHTML = `<span class="swatch-accent" style="background:${t.accent}"></span>`;
+      btn.addEventListener('click', () => applyTheme(t.key));
+      themeSwatches.appendChild(btn);
+    }
+  }
+
+  function applyBgImage(dataURL) {
+    if (dataURL) {
+      bgImageLayer.style.backgroundImage = `url(${dataURL})`;
+      bgImageLayer.style.opacity = String(settings.bgOpacity);
+      bgImageLayer.classList.add('has-image');
+      settings.bgImage = dataURL;
+    } else {
+      bgImageLayer.style.backgroundImage = 'none';
+      bgImageLayer.classList.remove('has-image');
+      settings.bgImage = null;
+    }
+  }
+
+  function handleBgUpload() {
+    bgFileInput.click();
+  }
+
+  function onBgFileSelected(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataURL = reader.result;
+      applyBgImage(dataURL);
+      api.saveSettings({ bgImage: dataURL });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = ''; // 允许重新选同一文件
+  }
+
+  function handleBgRemove() {
+    applyBgImage(null);
+    api.saveSettings({ bgImage: null });
+  }
+
+  function onBgOpacityChange() {
+    if (isLoadingSettings) return;
+    const v = parseFloat(bgOpacitySlider.value);
+    settings.bgOpacity = v;
+    if (settings.bgImage) {
+      bgImageLayer.style.opacity = String(v);
+    }
+    api.saveSettings({ bgOpacity: v });
+  }
+
+  async function loadSettingsState() {
+    try {
+      isLoadingSettings = true;
+      const s = await api.loadSettings();
+      Object.assign(settings, s);
+      applyTheme(settings.theme);
+      applyBgImage(settings.bgImage);
+      bgOpacitySlider.value = String(settings.bgOpacity);
+    } catch (_) {
+      renderThemeSwatches();
+    } finally {
+      isLoadingSettings = false;
+    }
+  }
+
+  // ============================================================
+  //  Mini 态（贴边吸附）
+  // ============================================================
+
+  function updateMiniCount() {
+    if (!miniCount) return;
+    const pending = items.filter(
+      (it) => it.title !== '__DIVIDER__' && !it.done
+    ).length;
+    miniCount.textContent = String(pending);
+  }
+
+  function enterMiniMode() {
+    isMiniMode = true;
+    document.body.classList.add('is-mini');
+    updateMiniCount();
+    miniBar.classList.remove('hidden');
+  }
+
+  function exitMiniMode() {
+    isMiniMode = false;
+    document.body.classList.remove('is-mini');
+    miniBar.classList.add('hidden');
+  }
+
+  function initWindowControls() {
+    minBtn.addEventListener('click', () => api.minimize());
+    shrinkBtn.addEventListener('click', () => api.enterMini());
+    closeBtn.addEventListener('click', () => api.close());
+    pinBtn.addEventListener('click', () => api.togglePin());
+
+    btnAdd.addEventListener('click', () => addTask());
+    btnAddEmpty.addEventListener('click', () => addTask());
+    btnDivider.addEventListener('click', () => addDivider());
+    btnDelete.addEventListener('click', () => deleteSelected());
+    btnSearch.addEventListener('click', () => toggleSearch());
+    searchClearBtn.addEventListener('click', () => {
+      searchInputEl.value = '';
+      activeSearch = '';
+      applyFilter();
+      searchInputEl.focus();
+    });
+    searchInputEl.addEventListener('input', () => {
+      activeSearch = searchInputEl.value;
+      applyFilter();
+    });
+    btnHelp.addEventListener('click', () => toggleHelp());
+    helpPanel.addEventListener('click', (e) => {
+      if (e.target === helpPanel) toggleHelp(false);
+    });
+
+    // 主题
+    btnTheme.addEventListener('click', () => {
+      toggleHelp(false);
+      toggleThemePanel();
+    });
+    themePanel.addEventListener('click', (e) => {
+      if (e.target === themePanel) toggleThemePanel(false);
+    });
+    btnUploadBg.addEventListener('click', handleBgUpload);
+    btnRemoveBg.addEventListener('click', handleBgRemove);
+    bgFileInput.addEventListener('change', onBgFileSelected);
+    bgOpacitySlider.addEventListener('input', onBgOpacityChange);
+
+    // Mini bar：drag region 会吞 click，改用 mousedown/mouseup 区分点击 vs 拖动
+    // 点击（位移 < 6px）→ 恢复窗口；拖动 → 让系统处理移动窗口
+    let miniDownX = 0, miniDownY = 0, miniDragging = false;
+    miniBar.addEventListener('mousedown', (e) => {
+      miniDownX = e.clientX;
+      miniDownY = e.clientY;
+      miniDragging = false;
+    });
+    miniBar.addEventListener('mousemove', (e) => {
+      if (Math.abs(e.clientX - miniDownX) > 6 || Math.abs(e.clientY - miniDownY) > 6) {
+        miniDragging = true;
+      }
+    });
+    miniBar.addEventListener('mouseup', () => {
+      if (!miniDragging && isMiniMode) api.exitMini();
+    });
+    miniBar.addEventListener('mouseleave', () => { miniDragging = true; });
+  }
+
+  function setPinButtonState(active) {
+    pinBtn.classList.toggle('is-active', !!active);
+    pinBtn.title = active ? '取消置顶 (Ctrl+Shift+T)' : '置顶 (Ctrl+Shift+T)';
+  }
+  async function initPinState() {
+    try {
+      setPinButtonState(await api.getPinState());
+    } catch (_) {}
+    api.onPinToggled(setPinButtonState);
+  }
+
+  // ============================================================
+  //  加载 & 初始化
+  // ============================================================
+
+  async function loadInitial() {
+    try {
+      const doc = await api.loadNote();
+      if (Array.isArray(doc?.items)) {
+        items = doc.items;
+      } else {
+        items = [];
+      }
+      docUpdatedAt = doc?.updatedAt || null;
+      saveTimeEl.textContent = formatTime(docUpdatedAt);
+      renderList();
+      setStatus(null, '就绪');
+    } catch (err) {
+      console.error('加载失败：', err);
+      items = [];
+      setStatus(null, '加载失败');
+    }
+  }
+
+  function init() {
+    // 事件委托
+    taskListEl.addEventListener('click', onTaskListClick);
+    taskListEl.addEventListener('input', onTaskListInput);
+    taskListEl.addEventListener('keydown', onTaskListKeyDown);
+    document.addEventListener('keydown', onGlobalKeyDown);
+
+    initWindowControls();
+    initPinState();
+
+    // mini 态事件（主进程贴边/恢复时通知）
+    if (api.onSnapStateChanged) {
+      api.onSnapStateChanged((mini) => {
+        if (mini) enterMiniMode(); else exitMiniMode();
+      });
+    }
+
+    // 先加载主题设置，再加载笔记（避免主题闪烁）
+    loadSettingsState().finally(() => {
+      loadInitial();
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (isDirty) {
+        try {
+          api.saveNote({
+            items: items.map((it) => {
+              const copy = { ...it };
+              delete copy._idx;
+              return copy;
+            })
+          });
+        } catch (_) {}
+      }
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
