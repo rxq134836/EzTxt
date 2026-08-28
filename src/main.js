@@ -11,7 +11,10 @@ let isPinned = false;
 let tray = null;
 let isQuitting = false;
 
-const STORAGE_DIR = path.join(app.getPath('userData'), 'storage');
+// 存储目录：开发时用项目 data/（Trae 沙箱友好），打包后用 userData
+const STORAGE_DIR = app.isPackaged
+  ? path.join(app.getPath('userData'), 'storage')
+  : path.join(__dirname, '..', 'data');
 const NOTE_FILE = path.join(STORAGE_DIR, 'note.json');
 const SETTINGS_FILE = path.join(STORAGE_DIR, 'settings.json');
 
@@ -126,7 +129,7 @@ async function saveNote(_, doc) {
     }));
 
     const payload = { items: normalized, updatedAt: now };
-    await fs.writeFile(NOTE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+    await atomicWrite(NOTE_FILE, JSON.stringify(payload, null, 2), 'utf8');
     return { ok: true, updatedAt: now, count: normalized.length };
   } catch (err) {
     console.error('保存笔记失败：', err);
@@ -138,6 +141,33 @@ async function ensureStorageDir() {
   if (!existsSync(STORAGE_DIR)) {
     await fs.mkdir(STORAGE_DIR, { recursive: true });
   }
+}
+
+/**
+ * 原子写入文件：先写 .tmp 再 rename，避免 EPERM/文件锁/半写入
+ * Windows 下 rename 本身是原子的，同磁盘上 O(1)
+ */
+async function atomicWrite(targetPath, content, encoding = 'utf8', retries = 5) {
+  const tmpPath = targetPath + '.tmp';
+  let lastErr;
+  for (let i = 0; i < retries; i++) {
+    try {
+      await fs.writeFile(tmpPath, content, encoding);
+      await fs.rename(tmpPath, targetPath);
+      return;
+    } catch (err) {
+      lastErr = err;
+      // EPERM/EBUSY 文件锁，等一下再试
+      if ((err.code === 'EPERM' || err.code === 'EBUSY') && i < retries - 1) {
+        await new Promise((r) => setTimeout(r, 80 * (i + 1)));
+        continue;
+      }
+      // 尝试清理残留 .tmp
+      try { await fs.unlink(tmpPath); } catch (_) {}
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 const DEFAULT_SETTINGS = {
@@ -167,7 +197,7 @@ async function saveSettings(_, patch) {
     await ensureStorageDir();
     const current = await loadSettings();
     const merged = { ...current, ...patch };
-    await fs.writeFile(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
+    await atomicWrite(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
     return { ok: true, settings: merged };
   } catch (err) {
     console.error('保存设置失败：', err);
@@ -205,9 +235,10 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // 窗口首次 show 后也跑一次贴边检测（应对上次关闭前就在边缘的情况）
-    setTimeout(checkSnapDebounced, 400);
   });
+
+  // 窗口首次 show 后也跑一次贴边检测（应对上次关闭前就在边缘的情况）
+  setTimeout(checkSnapDebounced, 400);
 
   mainWindow.on('moved', checkSnapDebounced);
 
@@ -240,7 +271,10 @@ let savedBounds = null;         // 贴边前保存的窗口原尺寸
 let snapDebounce = null;
 const SNAP_THRESHOLD = 35;      // 距边缘多少像素内触发贴边（增大 → 更强弹性）
 const MINI_SIZE = 56;           // mini 窗尺寸（px）
-const EDGE_MARGIN = 10;         // 贴边后 mini 条距离屏幕边缘的留白（px）
+const EDGE_MARGIN = 10;         // mini 球距离屏幕安全边距（px）
+const UNFOLD_GAP = 4;           // 展开后主窗口与 mini 球之间的小间距（px）
+let snapEdge = null;            // 当前 mini 球贴的屏幕边：'left' | 'right' | 'top' | 'bottom'
+let snapMiniPos = null;         // mini 球当前屏幕坐标 {x, y}
 
 function getNearestWorkArea() {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -255,19 +289,19 @@ function getNearestWorkArea() {
 
 function checkSnap() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (isSnapped) return; // 已经在 mini 态，不再重复贴边
+  if (isSnapped) return;
   const wa = getNearestWorkArea();
   if (!wa) return;
   const b = mainWindow.getBounds();
 
-  // 只有正常尺寸的窗口才检测（避免 mini 态误触）
   if (b.width < 200 || b.height < 200) return;
 
-  // 只在窗口距离边缘 < SNAP_THRESHOLD 时才触发（拖到边缘的自然吸附）
   const pos = findNearestEdgePos(wa, b, SNAP_THRESHOLD);
   if (!pos) return;
 
   savedBounds = { ...b };
+  snapEdge = pos.edge;
+  snapMiniPos = { x: pos.nx, y: pos.ny };
   isSnapped = true;
   doSnapResize(pos.nx, pos.ny);
 }
@@ -310,9 +344,26 @@ function findNearestEdgePos(wa, b, distThreshold = null) {
 }
 
 /**
+ * 把主窗口展开位置(基于贴边方向 + mini 球当前位置)夹在 workArea 内,保证完整可见。
+ */
+function clampToWorkArea(bounds, wa) {
+  if (!wa) return bounds;
+  const maxX = wa.x + wa.width - bounds.width;
+  const maxY = wa.y + wa.height - bounds.height;
+  return {
+    ...bounds,
+    x: Math.round(Math.max(wa.x, Math.min(bounds.x, maxX))),
+    y: Math.round(Math.max(wa.y, Math.min(bounds.y, maxY)))
+  };
+}
+
+/**
  * 执行缩小动作：先发 IPC 让渲染层隐藏 .app，再延迟缩窗（防 race 漏出）
+ * 同时把 mini 球设为置顶(高于桌面其他窗口),退出 mini 态时恢复用户原置顶设置。
  */
 function doSnapResize(nx, ny) {
+  mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  mainWindow.webContents.send('pin-toggled', true); // 通知渲染层 pin 按钮高亮
   mainWindow.webContents.send('snap-state-changed', true);
   setTimeout(() => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -323,21 +374,6 @@ function doSnapResize(nx, ny) {
 function checkSnapDebounced() {
   if (snapDebounce) clearTimeout(snapDebounce);
   snapDebounce = setTimeout(checkSnap, 250);
-}
-
-function exitSnapped() {
-  if (!isSnapped || !mainWindow) return;
-  const targetBounds = savedBounds;
-  isSnapped = false;
-  savedBounds = null;
-  mainWindow.webContents.send('snap-state-changed', false);
-  // 先通知渲染层恢复 UI，再放大窗口（反向 race）
-  setTimeout(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    if (targetBounds) {
-      mainWindow.setBounds(targetBounds);
-    }
-  }, 60);
 }
 
 /**
@@ -351,11 +387,10 @@ function enterMini() {
   const wa = getNearestWorkArea();
   savedBounds = { ...b };
 
-  let nx, ny;
+  let nx, ny, edge = null;
   if (wa) {
-    // 总是贴最近边缘（按钮用户明确要贴边）
     const pos = findNearestEdgePos(wa, b, null);
-    if (pos) { nx = pos.nx; ny = pos.ny; }
+    if (pos) { nx = pos.nx; ny = pos.ny; edge = pos.edge; }
     else {
       nx = Math.max(wa.x, Math.min(b.x + b.width - MINI_SIZE, wa.x + wa.width - MINI_SIZE));
       ny = Math.max(wa.y, Math.min(b.y + 8, wa.y + wa.height - MINI_SIZE));
@@ -365,8 +400,74 @@ function enterMini() {
     ny = b.y + 8;
   }
 
+  snapEdge = edge || null;
+  snapMiniPos = { x: nx, y: ny };
   isSnapped = true;
   doSnapResize(nx, ny);
+}
+
+/**
+ * 退出 mini 态展开主窗口：
+ *  1. 先取 mini 球当前真实 bounds(用户可能拖动过 mini 球,snapMiniPos 是过期快照)
+ *  2. 根据 mini 球当前位置,动态判断最靠近哪条屏幕边
+ *  3. 把主窗口放在 mini 球「反侧」,再夹在 workArea 内防越界
+ *  4. 恢复用户原本的 isPinned 置顶状态(不是 mini 态那个强制置顶)
+ */
+function exitSnapped() {
+  if (!isSnapped || !mainWindow) return;
+
+  // 先取消 mini 态强制置顶(恢复用户原本的 isPinned 设置)
+  applyPinState(); // 内部用 isPinned(用户设置)决定是否置顶
+
+  const miniBounds = mainWindow.getBounds();
+  const wa = getNearestWorkArea();
+
+  const mainW = savedBounds.width;
+  const mainH = savedBounds.height;
+  let targetX = savedBounds.x;
+  let targetY = savedBounds.y;
+
+  // 动态判断 mini 球当前最靠近哪条屏幕边
+  let edge = snapEdge; // 先用进入 mini 时的记录作默认
+  if (wa) {
+    const cx = miniBounds.x + MINI_SIZE / 2;
+    const cy = miniBounds.y + MINI_SIZE / 2;
+    const leftDist = cx - wa.x;
+    const rightDist = (wa.x + wa.width) - cx;
+    const topDist = cy - wa.y;
+    const bottomDist = (wa.y + wa.height) - cy;
+    let minDist = Infinity;
+    [{ e: 'left', d: leftDist }, { e: 'right', d: rightDist },
+     { e: 'top', d: topDist }, { e: 'bottom', d: bottomDist }].forEach(({ e, d }) => {
+      if (d < minDist) { minDist = d; edge = e; }
+    });
+  }
+
+  if (edge) {
+    const m = { x: miniBounds.x, y: miniBounds.y }; // 用当前真实位置,不用旧快照
+    switch (edge) {
+      case 'left':   targetX = m.x + MINI_SIZE + UNFOLD_GAP;       targetY = m.y + MINI_SIZE / 2 - mainH / 2; break;
+      case 'right':  targetX = m.x - mainW - UNFOLD_GAP;          targetY = m.y + MINI_SIZE / 2 - mainH / 2; break;
+      case 'top':    targetX = m.x + MINI_SIZE / 2 - mainW / 2;   targetY = m.y + MINI_SIZE + UNFOLD_GAP;    break;
+      case 'bottom': targetX = m.x + MINI_SIZE / 2 - mainW / 2;   targetY = m.y - mainH - UNFOLD_GAP;        break;
+    }
+    const clamped = clampToWorkArea({ x: targetX, y: targetY, width: mainW, height: mainH }, wa);
+    targetX = clamped.x;
+    targetY = clamped.y;
+  }
+
+  const targetBounds = { x: targetX, y: targetY, width: mainW, height: mainH };
+
+  isSnapped = false;
+  savedBounds = null;
+  snapEdge = null;
+  snapMiniPos = null;
+  mainWindow.webContents.send('snap-state-changed', false);
+
+  setTimeout(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.setBounds(targetBounds);
+  }, 60);
 }
 
 // ======= 托盘 =======

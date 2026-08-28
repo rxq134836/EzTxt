@@ -658,12 +658,12 @@
     btnTheme.classList.toggle('is-active', show);
   }
 
-  function applyTheme(key) {
+  function applyTheme(key, persist = true) {
     if (!THEMES.find((t) => t.key === key)) key = 'amber';
     document.body.dataset.theme = key;
     settings.theme = key;
     renderThemeSwatches();
-    api.saveSettings({ theme: key });
+    if (persist) api.saveSettings({ theme: key });
   }
 
   function renderThemeSwatches() {
@@ -730,7 +730,7 @@
       isLoadingSettings = true;
       const s = await api.loadSettings();
       Object.assign(settings, s);
-      applyTheme(settings.theme);
+      applyTheme(settings.theme, false);   // 启动加载，不回写磁盘
       applyBgImage(settings.bgImage);
       bgOpacitySlider.value = String(settings.bgOpacity);
     } catch (_) {

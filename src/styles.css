@@ -280,7 +280,7 @@ html, body {
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 
 /* ========= Task card ========= */
@@ -445,11 +445,12 @@ html, body {
 .card-note {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 220ms var(--ease-out);
+  transition: max-height 220ms var(--ease-out), padding-top 220ms var(--ease-out);
   padding: 0 4px 6px 26px;
 }
 .task-card.is-expanded .card-note {
   max-height: 520px;
+  padding-top: 16px;  /* 标题与编辑框之间的间距 */
 }
 
 .card-editor {
