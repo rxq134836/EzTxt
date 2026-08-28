@@ -1,6 +1,9 @@
 # 依赖
 node_modules/
 
+# npm 本地临时 cache(用 --cache .npm-cache 时)
+.npm-cache/
+
 # 构建产物
 dist/
 build/

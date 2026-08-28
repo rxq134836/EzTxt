@@ -804,23 +804,76 @@
     bgFileInput.addEventListener('change', onBgFileSelected);
     bgOpacitySlider.addEventListener('input', onBgOpacityChange);
 
-    // Mini bar：drag region 会吞 click，改用 mousedown/mouseup 区分点击 vs 拖动
-    // 点击（位移 < 6px）→ 恢复窗口；拖动 → 让系统处理移动窗口
-    let miniDownX = 0, miniDownY = 0, miniDragging = false;
-    miniBar.addEventListener('mousedown', (e) => {
-      miniDownX = e.clientX;
-      miniDownY = e.clientY;
-      miniDragging = false;
+    // Mini bar: 用 JS 区分点击 vs 拖动(原生 drag region 已移除)
+    // 方案: pointer events + screen 坐标 + pointer capture
+    //   - 点击(位移<5px 且按下<250ms)或双击 → 退出 mini 态展开窗口
+    //   - 拖动 → 跟随鼠标移动 mini 条位置
+    let miniDownStart = null;       // { screenX, screenY, lastScreenX, lastScreenY, time }
+    let miniIsDragging = false;
+    const CLICK_DIST_THRESHOLD = 5;
+    const CLICK_TIME_THRESHOLD = 250;
+
+    miniBar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      miniDownStart = {
+        screenX: e.screenX, screenY: e.screenY,
+        lastScreenX: e.screenX, lastScreenY: e.screenY,
+        time: Date.now()
+      };
+      miniIsDragging = false;
+      miniBar.setPointerCapture(e.pointerId);
     });
-    miniBar.addEventListener('mousemove', (e) => {
-      if (Math.abs(e.clientX - miniDownX) > 6 || Math.abs(e.clientY - miniDownY) > 6) {
-        miniDragging = true;
+
+    miniBar.addEventListener('pointermove', (e) => {
+      if (!miniDownStart) return;
+      const s = miniDownStart;
+      const totalDx = e.screenX - s.screenX;
+      const totalDy = e.screenY - s.screenY;
+      const dist = Math.hypot(totalDx, totalDy);
+
+      if (!miniIsDragging && dist > CLICK_DIST_THRESHOLD) {
+        miniIsDragging = true;
+        miniBar.classList.add('is-dragging');
+      }
+      if (miniIsDragging) {
+        const dx = e.screenX - s.lastScreenX;
+        const dy = e.screenY - s.lastScreenY;
+        api.moveWindow(dx, dy);
+        s.lastScreenX = e.screenX;
+        s.lastScreenY = e.screenY;
       }
     });
-    miniBar.addEventListener('mouseup', () => {
-      if (!miniDragging && isMiniMode) api.exitMini();
+
+    miniBar.addEventListener('pointerup', (e) => {
+      if (!miniDownStart) return;
+      const s = miniDownStart;
+      const downMs = Date.now() - s.time;
+      const totalDx = e.screenX - s.screenX;
+      const totalDy = e.screenY - s.screenY;
+      const dist = Math.hypot(totalDx, totalDy);
+
+      miniBar.classList.remove('is-dragging');
+      try { miniBar.releasePointerCapture(e.pointerId); } catch (_) {}
+
+      const wasClick = !miniIsDragging && dist < CLICK_DIST_THRESHOLD && downMs < CLICK_TIME_THRESHOLD;
+      miniDownStart = null;
+      miniIsDragging = false;
+
+      if (wasClick && isMiniMode) {
+        api.exitMini();
+      }
     });
-    miniBar.addEventListener('mouseleave', () => { miniDragging = true; });
+
+    miniBar.addEventListener('pointercancel', () => {
+      miniBar.classList.remove('is-dragging');
+      miniDownStart = null;
+      miniIsDragging = false;
+    });
+
+    // 双击直接退出 mini 态
+    miniBar.addEventListener('dblclick', () => {
+      if (isMiniMode) api.exitMini();
+    });
   }
 
   function setPinButtonState(active) {

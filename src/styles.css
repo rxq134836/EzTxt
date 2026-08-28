@@ -693,8 +693,6 @@ body.is-mini .app {
   cursor: grab;
   box-shadow: var(--shadow-mini);
   user-select: none;
-  -webkit-app-region: drag;
-  app-region: drag;
   border: none;
   padding: 0;
   transition: transform 150ms var(--ease-out);

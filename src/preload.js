@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('api', {
   // Mini 小条控制
   enterMini: () => ipcRenderer.send('enter-mini'),
   exitMini: () => ipcRenderer.send('exit-mini'),
+  moveWindow: (dx, dy) => ipcRenderer.send('move-window', dx, dy),
 
   // 置顶状态变更通知
   onPinToggled: (callback) => {

@@ -10,11 +10,14 @@
     "dev": "electron . --enable-logging",
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable",
-    "dist:nsis": "electron-builder --win nsis"
+    "dist:nsis": "electron-builder --win nsis",
+    "gen:icon": "node scripts/gen-icon.js"
   },
   "devDependencies": {
     "electron": "^31.3.1",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.4"
   },
   "dependencies": {
     "marked": "^13.0.3"
@@ -22,22 +25,29 @@
   "build": {
     "appId": "com.eztxt.stickynote",
     "productName": "EzTxt",
+    "icon": "src/icon.ico",
     "directories": {
       "output": "dist"
     },
     "files": [
       "src/**/*",
+      "!src/logo.jpeg",
       "package.json"
     ],
     "win": {
+      "icon": "src/icon.ico",
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}"

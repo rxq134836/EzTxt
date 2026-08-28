@@ -5,7 +5,6 @@ const path = require('path');
 const fs = require('fs/promises');
 const { existsSync } = require('fs');
 const crypto = require('crypto');
-const zlib = require('zlib');
 
 let mainWindow = null;
 let isPinned = false;
@@ -15,6 +14,13 @@ let isQuitting = false;
 const STORAGE_DIR = path.join(app.getPath('userData'), 'storage');
 const NOTE_FILE = path.join(STORAGE_DIR, 'note.json');
 const SETTINGS_FILE = path.join(STORAGE_DIR, 'settings.json');
+
+// 图标资源(多尺寸 ico 供打包,256px png 供运行时 nativeImage)
+const ICON_PATH_ICO = path.join(__dirname, 'icon.ico');
+const ICON_PATH_PNG = path.join(__dirname, 'icon.png');
+
+// Windows 任务栏图标关联(确保修改生效、避免缓存)
+app.setAppUserModelId('com.eztxt.stickynote');
 
 function uid() {
   return crypto.randomBytes(6).toString('hex');
@@ -185,6 +191,7 @@ function createWindow() {
     alwaysOnTop: false,
     skipTaskbar: false,
     title: 'EzTxt 便签',
+    icon: ICON_PATH_PNG,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -231,8 +238,9 @@ function togglePin() {
 let isSnapped = false;          // 当前是否在 mini 贴边态
 let savedBounds = null;         // 贴边前保存的窗口原尺寸
 let snapDebounce = null;
-const SNAP_THRESHOLD = 12;      // 距边缘多少像素内触发贴边
+const SNAP_THRESHOLD = 35;      // 距边缘多少像素内触发贴边（增大 → 更强弹性）
 const MINI_SIZE = 56;           // mini 窗尺寸（px）
+const EDGE_MARGIN = 10;         // 贴边后 mini 条距离屏幕边缘的留白（px）
 
 function getNearestWorkArea() {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -294,10 +302,10 @@ function findNearestEdgePos(wa, b, distThreshold = null) {
   if (!edge) return null;
 
   let nx = b.x, ny = b.y;
-  if (edge === 'left')       { nx = wa.x; }
-  else if (edge === 'right') { nx = wa.x + wa.width - MINI_SIZE; }
-  else if (edge === 'top')   { ny = wa.y; }
-  else if (edge === 'bottom'){ ny = wa.y + wa.height - MINI_SIZE; }
+  if (edge === 'left')       { nx = wa.x + EDGE_MARGIN; }
+  else if (edge === 'right') { nx = wa.x + wa.width - MINI_SIZE - EDGE_MARGIN; }
+  else if (edge === 'top')   { ny = wa.y + EDGE_MARGIN; }
+  else if (edge === 'bottom'){ ny = wa.y + wa.height - MINI_SIZE - EDGE_MARGIN; }
   return { edge, nx, ny };
 }
 
@@ -363,85 +371,14 @@ function enterMini() {
 
 // ======= 托盘 =======
 
-/**
- * 生成纯色圆形 tray 图标（避免依赖外部 .ico 文件）
- * 输出 16×16 的 PNG Buffer
- */
-function generateTrayIcon() {
-  const SIZE = 16;
-  // 画一个圆形（antialias 简易版：圆形内不透明，外透明）
-  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE / 2 - 0.5;
-  const pixels = Buffer.alloc(SIZE * SIZE * 4); // RGBA
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      const dx = x + 0.5 - cx, dy = y + 0.5 - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const idx = (y * SIZE + x) * 4;
-      if (dist <= r) {
-        // 圆形内：琥珀 accent 色 #D16647
-        pixels[idx]     = 0xD1;
-        pixels[idx + 1] = 0x66;
-        pixels[idx + 2] = 0x47;
-        pixels[idx + 3] = 0xFF;
-      } else {
-        pixels[idx]     = 0;
-        pixels[idx + 1] = 0;
-        pixels[idx + 2] = 0;
-        pixels[idx + 3] = 0;
-      }
-    }
-  }
-  return encodePng(SIZE, SIZE, pixels);
-}
-
-/**
- * 极简 PNG 编码器：只支持 RGBA 原始像素 → PNG Buffer
- * 扫描线前加 filter byte 0（None），然后整个 deflate 压缩
- */
-function encodePng(w, h, rgba) {
-  const { crc32 } = require('zlib');
-  function crc(buf) { return require('zlib').crc32(buf) >>> 0; }
-
-  // 构造 raw image data（每行前加 filter=0）
-  const raw = Buffer.alloc(h * (1 + w * 4));
-  for (let y = 0; y < h; y++) {
-    raw[y * (1 + w * 4)] = 0; // filter byte
-    rgba.copy(raw, y * (1 + w * 4) + 1, y * w * 4, (y + 1) * w * 4);
-  }
-  const compressed = zlib.deflateSync(raw);
-
-  function chunk(type, data) {
-    const len = Buffer.alloc(4);
-    len.writeUInt32BE(data.length, 0);
-    const typeBuf = Buffer.from(type, 'ascii');
-    const crcBuf = Buffer.alloc(4);
-    crcBuf.writeUInt32BE(crc(Buffer.concat([typeBuf, data])), 0);
-    return Buffer.concat([len, typeBuf, data, crcBuf]);
-  }
-
-  const sig = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0);
-  ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8;  // bit depth
-  ihdr[9] = 6;  // color type: RGBA
-  ihdr[10] = 0; // compression
-  ihdr[11] = 0; // filter
-  ihdr[12] = 0; // interlace
-
-  return Buffer.concat([
-    sig,
-    chunk('IHDR', ihdr),
-    chunk('IDAT', compressed),
-    chunk('IEND', Buffer.alloc(0))
-  ]);
-}
-
 function createTray() {
-  const iconBuf = generateTrayIcon();
-  const icon = nativeImage.createFromBuffer(iconBuf);
+  // 优先用多尺寸 ico(Windows 托盘最佳),回退到 png
+  let icon = nativeImage.createFromPath(ICON_PATH_ICO);
   if (icon.isEmpty()) {
-    console.error('[tray] icon is empty! PNG encoder may be broken, buffer size:', iconBuf.length);
+    icon = nativeImage.createFromPath(ICON_PATH_PNG);
+  }
+  if (icon.isEmpty()) {
+    console.error('[tray] icon is empty, ico/png 均未找到');
   }
   tray = new Tray(icon);
   tray.setToolTip('EzTxt 便签');
@@ -508,6 +445,13 @@ function registerIpc() {
 
   // 主动缩小到 mini 小条（工具栏按钮触发）
   ipcMain.on('enter-mini', () => enterMini());
+
+  // JS 层拖动窗口（mini-bar 原生 drag region 移除后，用偏移量移动窗口）
+  ipcMain.on('move-window', (_e, dx, dy) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const b = mainWindow.getBounds();
+    mainWindow.setBounds({ x: b.x + (dx || 0), y: b.y + (dy || 0) });
+  });
 }
 
 app.whenReady().then(() => {
