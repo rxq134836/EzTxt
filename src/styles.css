@@ -445,12 +445,11 @@ html, body {
 .card-note {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 220ms var(--ease-out), padding-top 220ms var(--ease-out);
-  padding: 0 4px 6px 26px;
+  transition: max-height 220ms var(--ease-out);
+  padding: 16px 4px 6px 26px;  /* padding-top 始终 16px，避免展开/收起时间距跳变 */
 }
 .task-card.is-expanded .card-note {
-  max-height: 520px;
-  padding-top: 16px;  /* 标题与编辑框之间的间距 */
+  max-height: 340px;
 }
 
 .card-editor {
