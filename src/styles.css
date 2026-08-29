@@ -574,7 +574,7 @@ html, body {
 .card-editor pre {
   margin: 0 0 8px;
   padding: 8px 10px;
-  min-height: 80px; /* 新建代码块即拥有舒适的输入区域（背景不再只有一行高） */
+  min-height: 52px; /* 初始约两行文字高度（2×18px 行高 + 上下 16px padding），适合直接输入 */
   background: rgba(var(--ink-rgb), 0.06);
   border: 1px solid var(--line);
   border-radius: 6px;
