@@ -11,6 +11,8 @@
   const $ = (sel) => document.querySelector(sel);
 
   const themeSwatches = $('#themeSwatches');
+  const materialOptionsEl = $('#materialOptions');
+  const bgOpacityBlock = $('#bgOpacityBlock');
   const fontSizeSliderEl = $('#fontSizeSlider');
   const fontSizeValueEl = $('#fontSizeValue');
   const btnUploadBg = $('#btnUploadBg');
@@ -21,7 +23,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'translucent', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -58,6 +60,35 @@
       btn.addEventListener('click', () => applyTheme(t.key));
       themeSwatches.appendChild(btn);
     }
+  }
+
+  // ===== 材质（半透明 / 亚克力） =====
+  /** 设置窗口自身立即套用材质样式（磨砂观感跟随主窗口） */
+  function applyMaterial(material) {
+    const val = material === 'acrylic' ? 'acrylic' : 'translucent';
+    settings.material = val;
+    document.body.dataset.material = val;
+    renderMaterialOptions();
+    updateBgOpacityVisibility();
+  }
+
+  function renderMaterialOptions() {
+    materialOptionsEl.querySelectorAll('.material-btn').forEach((btn) => {
+      const active = btn.dataset.material === settings.material;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  /** 亚克力模式下透明度滑杆无意义（磨砂观感由材质本身决定）→ 隐藏 */
+  function updateBgOpacityVisibility() {
+    bgOpacityBlock.classList.toggle('hidden', settings.material === 'acrylic');
+  }
+
+  function onMaterialSelect(material) {
+    if (material === settings.material) return;
+    applyMaterial(material);
+    api.saveSettings({ material: settings.material });
   }
 
   // ===== 字体大小 =====
@@ -392,6 +423,7 @@
       }
       document.body.dataset.theme = settings.theme;
       applyFontSize(settings.fontSize);
+      applyMaterial(settings.material);   // 材质（含透明度设置显隐）
       bgOpacitySlider.value = String(settings.bgOpacity);
       bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
       // 历史兼容：老配置只有 bgImage 没有 bgHistory → 用当前图初始化
@@ -449,6 +481,10 @@
 
   // ===== 事件 =====
   winClose.addEventListener('click', () => window.close());
+  materialOptionsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.material-btn');
+    if (btn && btn.dataset.material) onMaterialSelect(btn.dataset.material);
+  });
   fontSizeSliderEl.addEventListener('input', onFontSizeChange);
   btnUploadBg.addEventListener('click', handleBgUpload);
   btnRemoveBg.addEventListener('click', handleBgRemove);

@@ -11,6 +11,8 @@ let isPinned = false;
 let tray = null;
 let isQuitting = false;
 let settingsWindow = null;
+// 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
+let currentMaterial = 'translucent';
 
 // 存储目录：动态（可由设置页修改）；开发时默认项目 data/，打包后默认 userData/storage
 let STORAGE_DIR = null;
@@ -192,6 +194,7 @@ function enqueueWrite(fn) {
 
 const DEFAULT_SETTINGS = {
   theme: 'blue',          // 主题 key
+  material: 'translucent', // 窗口材质：translucent（半透明）/ acrylic（亚克力磨砂）
   bgImage: null,          // 当前背景图 dataURL（渲染层压缩后存入）
   bgHistory: [],          // 最近上传的背景图列表（新→旧，最多 10 张，dataURL）
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
@@ -494,6 +497,8 @@ function doSnapResize(nx, ny) {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.webContents.send('pin-toggled', true); // 通知渲染层 pin 按钮高亮
   mainWindow.webContents.send('snap-state-changed', true);
+  // mini 态切掉系统材质：避免亚克力磨砂铺满整个 56px 窗口矩形，球外露空白
+  try { mainWindow.setBackgroundMaterial('none'); } catch (_) {}
   const from = mainWindow.getBounds();
   const to = { x: Math.round(nx), y: Math.round(ny), width: MINI_SIZE, height: MINI_SIZE };
   animateWindowBounds(from, to, 180);
@@ -591,6 +596,11 @@ function exitSnapped() {
 
   // 平滑展开：从 mini 球位置动画到目标位置（期间保持置顶，动画结束后恢复用户置顶设置）
   animateWindowBounds(miniBounds, targetBounds, 200, () => {
+    // 退出 mini：恢复用户选择的窗口材质（亚克力 / 半透明）
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.setBackgroundMaterial(currentMaterial === 'acrylic' ? 'acrylic' : 'none');
+    } catch (_) {}
     applyPinState(); // 内部用 isPinned(用户设置)决定是否置顶
   });
 }
@@ -648,6 +658,17 @@ function registerIpc() {
 
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());
+
+  // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
+  // 透明窗口上 DWM 不渲染 backdrop material（Electron #48031），以 CSS 磨砂效果为主
+  ipcMain.on('set-window-material', (_e, material) => {
+    currentMaterial = material === 'acrylic' ? 'acrylic' : 'translucent';
+    if (isSnapped) return; // mini 态保持 none（只有球可见），退出时由 exitSnapped 恢复
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.setBackgroundMaterial(material === 'acrylic' ? 'acrylic' : 'none');
+    } catch (_) { /* 系统不支持时忽略（如 Windows 10） */ }
+  });
 
   // ===== 数据保存位置 =====
   ipcMain.handle('storage-get-info', () => ({

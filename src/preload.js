@@ -104,9 +104,12 @@ contextBridge.exposeInMainWorld('api', {
   loadNote: () => ipcRenderer.invoke('load-note'),
   saveNote: (note) => ipcRenderer.invoke('save-note', note),
 
-  // 设置（主题、背景图、字号、快捷键）
+  // 设置（主题、材质、背景图、字号、快捷键）
   loadSettings: () => ipcRenderer.invoke('load-settings'),
   saveSettings: (patch) => ipcRenderer.invoke('save-settings', patch),
+
+  // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
+  setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 
   // 打开独立的设置窗口
   openSettings: () => ipcRenderer.send('open-settings'),

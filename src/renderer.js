@@ -74,7 +74,7 @@
     { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
     { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
   ];
-  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'translucent', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
 
@@ -1035,6 +1035,16 @@
     if (persist) api.saveSettings({ theme: key });
   }
 
+  /** 应用窗口材质：translucent（半透明）/ acrylic（亚克力磨砂）。
+   *  半透明=主题色高不透明度+轻模糊；亚克力=低不透明度+强模糊（CSS 磨砂观感），
+   *  并尽力调用系统级亚克力（Windows 11 22H2+）。 */
+  function applyMaterial(material) {
+    const val = material === 'acrylic' ? 'acrylic' : 'translucent';
+    settings.material = val;
+    document.body.dataset.material = val;
+    if (api.setWindowMaterial) api.setWindowMaterial(val);
+  }
+
   function applyBgImage(dataURL) {
     if (dataURL) {
       bgImageLayer.style.backgroundImage = `url(${dataURL})`;
@@ -1059,6 +1069,7 @@
         settings.shortcuts[name] = { ...def, ...(settings.shortcuts[name] || {}) };
       }
       applyTheme(settings.theme, false);   // 启动加载，不回写磁盘
+      applyMaterial(settings.material);    // 应用窗口材质（含系统级亚克力）
       applyBgImage(settings.bgImage);
       applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
     } catch (_) {

@@ -34,6 +34,16 @@
 
         <div class="settings-block">
           <div class="settings-label-row">
+            <span class="settings-label">材质</span>
+          </div>
+          <div class="material-options" id="materialOptions">
+            <button class="material-btn" type="button" data-material="translucent">半透明</button>
+            <button class="material-btn" type="button" data-material="acrylic">亚克力</button>
+          </div>
+        </div>
+
+        <div class="settings-block">
+          <div class="settings-label-row">
             <span class="settings-label">页面字体大小</span>
             <span class="settings-value" id="fontSizeValue">13px</span>
           </div>
@@ -41,7 +51,7 @@
           <div class="range-labels"><span>小</span><span>大</span></div>
         </div>
 
-        <div class="settings-block">
+        <div class="settings-block" id="bgOpacityBlock">
           <div class="settings-label-row">
             <span class="settings-label">透明度</span>
             <span class="settings-value" id="bgOpacityValue">0.35</span>
