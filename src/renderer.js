@@ -143,20 +143,26 @@
         </button>
       </div>
       <div class="card-note">
-        <textarea class="card-editor" data-action="edit-note"
-                  placeholder="在此输入 Markdown 备注… (Ctrl+B 加粗 / Ctrl+I 斜体 / Ctrl+K 行内代码)" spellcheck="false"
-                  wrap="soft">${escapeTextarea(item.note || '')}</textarea>
+        <div class="card-editor" data-action="edit-note" contenteditable="true" spellcheck="false"
+             data-placeholder="在此输入 Markdown 备注… (Ctrl+B 加粗 / Ctrl+I 斜体 / Ctrl+K 代码 / Ctrl+Shift+[ ] 列表 / Enter 延续列表)"></div>
       </div>
     `;
+    // 异步把 Markdown 渲染成所见即所得内容（marked 在 preload 中同步执行，
+    // contextBridge 直接返回字符串；Promise.resolve 兼容两种形态）
+    Promise.resolve(api.renderMarkdown(item.note || ''))
+      .then((html) => {
+        if (li.isConnected) {
+          const editor = li.querySelector('.card-editor');
+          // 仅在用户尚未输入时写入，避免覆盖用户正在编辑的内容
+          if (editor && editor.innerHTML === '') editor.innerHTML = html;
+        }
+      })
+      .catch(() => {});
     return li;
   }
 
   function escapeAttr(s) {
     return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-  }
-  function escapeTextarea(s) {
-    // textarea 的 value 不需要转义 "，但需要把 </textarea> 转掉
-    return String(s || '').replace(/<\/textarea>/gi, '&lt;/textarea&gt;');
   }
 
   /**
@@ -455,20 +461,43 @@
   // ============================================================
 
   /**
-   * 给 textarea 中选中的文本（或光标位置）两侧包裹 Markdown 标记。
-   * 没有选中时，光标落在两个标记之间方便继续打字。
+   * 所见即所得编辑器（contenteditable）→ 同步到 Markdown 状态：
+   * 用 preload 中的 turndown 把 innerHTML 反序列化为 Markdown，
+   * 有变化才写入（避免无谓 dirty / 自动保存）。
    */
-  function wrapMark(textarea, mark, id) {
-    const s = textarea.selectionStart;
-    const ed = textarea.selectionEnd;
-    const v = textarea.value;
-    const inner = v.slice(s, ed);
-    const newVal = v.slice(0, s) + mark + inner + mark + v.slice(ed);
-    textarea.value = newVal;
-    // 光标落在开标记之后
-    textarea.selectionStart = s + mark.length;
-    textarea.selectionEnd = s + mark.length + inner.length;
-    updateNote(id, newVal);
+  function syncEditorNote(editor, id) {
+    // 用户清空后 Chromium 会残留 <br>，清掉让占位符能显示
+    if (editor.innerHTML === '<br>') editor.innerHTML = '';
+    const it = findItem(id);
+    if (!it) return;
+    // turndown 同步返回字符串（contextBridge 不包装 Promise）；Promise.resolve 兼容两种形态
+    Promise.resolve(api.htmlToMarkdown(editor.innerHTML))
+      .then((md) => {
+        if (md !== it.note) updateNote(id, md);
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * 用指定标签包裹当前选区（contenteditable 内，行内元素如 code）。
+   * 无选区时插入空标签、光标落中间。DOM 变更不会触发 input 事件，
+   * 因此操作后手动调用 syncEditorNote。
+   */
+  function wrapSelectionWith(tagName, editor, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const el = document.createElement(tagName);
+    el.textContent = range.toString();
+    range.deleteContents();
+    range.insertNode(el);
+    // 光标移到标签末尾
+    const r = document.createRange();
+    r.setStartAfter(el);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    syncEditorNote(editor, id);
   }
 
   function onTaskListClick(e) {
@@ -507,7 +536,10 @@
     const li = target.closest('.task-card');
     if (!li) return;
     const id = li.dataset.id;
-    const action = target.dataset.action;
+    // contenteditable 的 e.target 可能是内部元素（strong/li 等），用 closest 取 action
+    const actionEl = target.closest ? target.closest('[data-action]') : null;
+    if (!actionEl) return;
+    const action = actionEl.dataset.action;
 
     if (action === 'edit-title') {
       const v = target.value;
@@ -515,10 +547,8 @@
       if (!it) return;
       if (v !== it.title) updateTitle(id, v);
     } else if (action === 'edit-note') {
-      const v = target.value;
-      const it = findItem(id);
-      if (!it) return;
-      if (v !== it.note) updateNote(id, v);
+      // 所见即所得编辑器：渲染后的 DOM → Markdown 保存
+      syncEditorNote(actionEl, id);
     }
   }
 
@@ -527,51 +557,58 @@
     const li = target.closest('.task-card');
     if (!li) return;
     const id = li.dataset.id;
-    const action = target.dataset.action;
+    const actionEl = target.closest ? target.closest('[data-action]') : null;
+    if (!actionEl) return;
+    const action = actionEl.dataset.action;
 
     if (action === 'edit-note') {
-      const t = target;
-      const s = t.selectionStart;
-      const ed = t.selectionEnd;
-      const v = t.value;
+      // 所见即所得编辑器（contenteditable）：用原生富文本命令，格式即时可见
+      const ctrl = e.ctrlKey || e.metaKey;
 
-      // Tab 缩进
+      // Tab / Shift+Tab：缩进 / 反缩进（列表内缩进嵌套层级）
       if (e.key === 'Tab') {
         e.preventDefault();
-        if (e.shiftKey) {
-          const lineStart = v.lastIndexOf('\n', s - 1) + 1;
-          let before = v.slice(lineStart, s);
-          let after = v.slice(s, ed);
-          const indent = before.startsWith('  ') ? 2 : before.startsWith('\t') ? 1 : 0;
-          if (indent > 0) {
-            before = before.slice(indent);
-            const newVal = v.slice(0, lineStart) + before + after + v.slice(ed);
-            t.value = newVal;
-            t.selectionStart = t.selectionEnd = s - indent;
-            updateNote(id, newVal);
-          }
-        } else {
-          const newVal = v.slice(0, s) + '  ' + v.slice(ed);
-          t.value = newVal;
-          t.selectionStart = t.selectionEnd = s + 2;
-          updateNote(id, newVal);
-        }
+        document.execCommand(e.shiftKey ? 'outdent' : 'indent');
+        return;
       }
       // Ctrl+B 加粗
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'b') {
         e.preventDefault();
-        wrapMark(t, '**', id);
+        document.execCommand('bold');
+        return;
       }
       // Ctrl+I 斜体
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'i') {
+      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'i') {
         e.preventDefault();
-        wrapMark(t, '*', id);
+        document.execCommand('italic');
+        return;
       }
-      // Ctrl+K 行内代码
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
+      // Ctrl+K 行内代码：用 <code> 包裹选区
+      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        wrapMark(t, '`', id);
+        wrapSelectionWith('code', actionEl, id);
+        return;
       }
+      // Ctrl+Shift+K 代码块
+      if (ctrl && e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        document.execCommand('formatBlock', false, 'pre');
+        return;
+      }
+      // Ctrl+Shift+[ 有序列表（Typora 风格；部分键盘 Shift 后 key 为 '{'）
+      if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) {
+        e.preventDefault();
+        document.execCommand('insertOrderedList');
+        return;
+      }
+      // Ctrl+Shift+] 无序列表（Typora 风格；部分键盘 Shift 后 key 为 '}'）
+      if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) {
+        e.preventDefault();
+        document.execCommand('insertUnorderedList');
+        return;
+      }
+      // Enter 延续列表：contenteditable 原生行为（li 内回车自动续项、空项回车结束列表）
+      // Shift+Enter：软换行，原生 <br>
     }
   }
 
@@ -606,8 +643,9 @@
     }
     // Backspace：删除选中
     if (e.key === 'Backspace') {
-      const focusTag = document.activeElement && document.activeElement.tagName;
-      const isEditing = focusTag === 'INPUT' || focusTag === 'TEXTAREA';
+      const ae = document.activeElement;
+      const focusTag = ae && ae.tagName;
+      const isEditing = focusTag === 'INPUT' || focusTag === 'TEXTAREA' || (ae && ae.isContentEditable);
       if (!isEditing && selectedId) {
         e.preventDefault();
         deleteSelected();
@@ -910,11 +948,25 @@
     }
   }
 
+  /**
+   * 粘贴处理：所见即所得编辑器只插入纯文本，避免网页富文本产生脏 DOM。
+   * （粘贴 Markdown 源码时可直接输入，样式在输入后由 marked 再渲染）
+   */
+  function onTaskListPaste(e) {
+    const target = e.target;
+    const editor = target.closest && target.closest('[data-action="edit-note"]');
+    if (!editor) return;
+    e.preventDefault();
+    const text = e.clipboardData.getData('text/plain');
+    document.execCommand('insertText', false, text);
+  }
+
   function init() {
     // 事件委托
     taskListEl.addEventListener('click', onTaskListClick);
     taskListEl.addEventListener('input', onTaskListInput);
     taskListEl.addEventListener('keydown', onTaskListKeyDown);
+    taskListEl.addEventListener('paste', onTaskListPaste);
     document.addEventListener('keydown', onGlobalKeyDown);
 
     initWindowControls();
