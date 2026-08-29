@@ -11,6 +11,8 @@ let isPinned = false;
 let tray = null;
 let isQuitting = false;
 let settingsWindow = null;
+// 主窗口 CSS 视口尺寸（渲染层上报 innerWidth/innerHeight，供设置窗口同步）
+let lastMainWindowSize = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
 let currentMaterial = 'opaque';
 
@@ -201,7 +203,8 @@ const DEFAULT_SETTINGS = {
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
   fontSize: 13,           // 页面基础字体大小（px），设置页滑杆控制
   closeAction: 'tray',    // 主窗口关闭按钮行为：tray（缩小到托盘）/ quit（退出软件）
-  windowSize: 'default',  // 主窗口尺寸预设（见 WINDOW_SIZES）
+  windowSize: 'default',  // 主窗口尺寸预设（见 WINDOW_SIZES；'custom' 用 customWindowSize）
+  customWindowSize: { width: 560, height: 620 }, // 自定义窗口尺寸（窗口比例 → 自定义）
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
@@ -306,6 +309,19 @@ function createWindow() {
   setTimeout(checkSnapDebounced, 400);
 
   mainWindow.on('moved', checkSnapDebounced);
+
+  // 主窗口尺寸变化时通知设置窗口（自定义尺寸弹窗实时同步数值）。
+  // 用渲染层上报的 CSS 视口尺寸（innerWidth/innerHeight）最准确；
+  // 兜底用 getContentSize()（内容区，不含边框，比 getSize 更贴近视口）。
+  mainWindow.on('resize', () => {
+    if (!settingsWindow || settingsWindow.isDestroyed()) return;
+    if (lastMainWindowSize) {
+      settingsWindow.webContents.send('window-resized', lastMainWindowSize);
+      return;
+    }
+    const [w, h] = mainWindow.getContentSize();
+    settingsWindow.webContents.send('window-resized', { width: w, height: h });
+  });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
@@ -684,11 +700,40 @@ function registerIpc() {
   });
 
   // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
-  ipcMain.on('set-window-size', (_e, key) => {
+  ipcMain.on('set-window-size', (_e, key, size) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     if (isSnapped) return; // mini 态不调整
-    const size = WINDOW_SIZES[key] || WINDOW_SIZES['default'];
-    mainWindow.setSize(size.width, size.height);
+    let w = null;
+    let h = null;
+    if (key === 'custom' && size && Number.isFinite(size.width) && Number.isFinite(size.height)) {
+      w = Math.round(size.width);
+      h = Math.round(size.height);
+    } else {
+      const preset = WINDOW_SIZES[key] || WINDOW_SIZES['default'];
+      w = preset.width;
+      h = preset.height;
+    }
+    w = Math.max(380, w);
+    h = Math.max(380, h);
+    mainWindow.setSize(w, h);
+  });
+
+  // 查询主窗口当前尺寸（自定义尺寸弹窗打开时用）——优先渲染层上报的 CSS 视口尺寸
+  ipcMain.handle('get-window-size', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return { width: 560, height: 620 };
+    if (lastMainWindowSize) return { ...lastMainWindowSize };
+    const [w, h] = mainWindow.getContentSize();
+    return { width: w, height: h };
+  });
+
+  // 主窗口渲染层上报 CSS 视口尺寸（innerWidth/innerHeight，最准确），
+  // 存储并转发给设置窗口（自定义尺寸弹窗实时同步）
+  ipcMain.on('report-window-size', (_e, size) => {
+    if (!size || !Number.isFinite(size.width) || !Number.isFinite(size.height)) return;
+    lastMainWindowSize = { width: Math.round(size.width), height: Math.round(size.height) };
+    if (settingsWindow && !settingsWindow.isDestroyed()) {
+      settingsWindow.webContents.send('window-resized', lastMainWindowSize);
+    }
   });
 
   // ===== 数据保存位置 =====

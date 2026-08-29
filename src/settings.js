@@ -28,7 +28,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -129,7 +129,7 @@
   }
 
   // ===== 主窗口尺寸预设（外观 → 窗口比例） =====
-  const WINDOW_SIZE_KEYS = ['default', 'landscape-wide', 'landscape', 'portrait-narrow', 'portrait'];
+  const WINDOW_SIZE_KEYS = ['default', 'landscape-wide', 'landscape', 'portrait-narrow', 'portrait', 'custom'];
 
   function applyWindowSize(key) {
     const val = WINDOW_SIZE_KEYS.includes(key) ? key : 'default';
@@ -146,11 +146,68 @@
   }
 
   function onWindowSizeSelect(key) {
+    // 自定义：无论当前是否已是自定义，点击都重新弹出弹窗
+    if (key === 'custom') { openCustomSizeDialog(); return; }
     if (key === settings.windowSize) return;
     applyWindowSize(key);
     api.saveSettings({ windowSize: settings.windowSize });
-    // 实时调整主窗口尺寸
     if (api.setWindowSize) api.setWindowSize(key);
+  }
+
+  // ---- 自定义尺寸弹窗（输入宽高） ----
+  const customSizeMask = $('#customSizeMask');
+  const customSizeWidthEl = $('#customSizeWidth');
+  const customSizeHeightEl = $('#customSizeHeight');
+  const btnCustomSizeSave = $('#btnCustomSizeSave');
+  const btnCustomSizeCancel = $('#btnCustomSizeCancel');
+
+  const CUSTOM_MIN = 380;   // 与主进程 minWidth/minHeight 一致
+
+  /** 仅保证最小值（同步主窗口真实尺寸 / 保存时不截断上限） */
+  function ensureMin(v) {
+    const n = Math.round(Number(v));
+    return Number.isFinite(n) ? Math.max(CUSTOM_MIN, n) : CUSTOM_MIN;
+  }
+
+  function openCustomSizeDialog() {
+    customSizeMask.classList.remove('hidden');
+    // 初始数值：跟随主窗口当前尺寸（实时）——显示真实视口，不截断上限
+    if (api.getWindowSize) {
+      api.getWindowSize().then((size) => {
+        if (size && !customSizeMask.classList.contains('hidden')) {
+          customSizeWidthEl.value = String(ensureMin(size.width));
+          customSizeHeightEl.value = String(ensureMin(size.height));
+        }
+      }).catch(() => {});
+    }
+    customSizeWidthEl.focus();
+    customSizeWidthEl.select();
+  }
+
+  /** 主窗口尺寸变化 → 弹窗数值实时跟随（仅弹窗打开时更新输入框，显示真实值） */
+  function onMainWindowResized(size) {
+    if (!size || customSizeMask.classList.contains('hidden')) return;
+    customSizeWidthEl.value = String(ensureMin(size.width));
+    customSizeHeightEl.value = String(ensureMin(size.height));
+  }
+
+  function closeCustomSizeDialog() {
+    customSizeMask.classList.add('hidden');
+    renderWindowSizeOptions(); // 关闭后回显原选择
+  }
+
+  function saveCustomSize() {
+    // 与主进程一致：只钳最小 380，不设硬上限（主进程 setSize 受屏幕限制自然处理）
+    const width = ensureMin(customSizeWidthEl.value);
+    const height = ensureMin(customSizeHeightEl.value);
+    customSizeWidthEl.value = String(width);
+    customSizeHeightEl.value = String(height);
+    settings.windowSize = 'custom';
+    settings.customWindowSize = { width, height };
+    closeCustomSizeDialog();
+    renderWindowSizeOptions();
+    api.saveSettings({ windowSize: 'custom', customWindowSize: { width, height } });
+    if (api.setWindowSize) api.setWindowSize('custom', { width, height });
   }
 
   // ===== 亚克力磨砂强度 =====
@@ -601,15 +658,36 @@
     if (e.target === confirmMask) closeBgConfirm();
   });
 
-  // Esc：关闭确认框 → 退出背景管理模式
+  // 自定义窗口尺寸：输入宽高
+  btnCustomSizeSave.addEventListener('click', saveCustomSize);
+  btnCustomSizeCancel.addEventListener('click', closeCustomSizeDialog);
+  customSizeMask.addEventListener('click', (e) => {
+    if (e.target === customSizeMask) closeCustomSizeDialog();
+  });
+  // 回车键在输入框内触发保存
+  customSizeWidthEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveCustomSize(); }
+  });
+  customSizeHeightEl.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveCustomSize(); }
+  });
+
+  // Esc：关闭自定义尺寸弹窗 → 关闭确认框 → 退出背景管理模式
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!confirmMask.classList.contains('hidden')) {
+    if (!customSizeMask.classList.contains('hidden')) {
+      closeCustomSizeDialog();
+    } else if (!confirmMask.classList.contains('hidden')) {
       closeBgConfirm();
     } else if (bgManageMode) {
       toggleBgManageMode();
     }
   });
+
+  // 主窗口尺寸变化 → 自定义弹窗数值实时同步
+  if (api.onWindowResized) {
+    api.onWindowResized(onMainWindowResized);
+  }
 
   loadSettingsState();
   refreshStorageInfo();

@@ -181,8 +181,18 @@ contextBridge.exposeInMainWorld('api', {
   // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
   setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 
-  // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
-  setWindowSize: (key) => ipcRenderer.send('set-window-size', key),
+  // 主窗口尺寸预设（设置页「外观 → 窗口比例」；key='custom' 时带 size 宽高）
+  setWindowSize: (key, size) => ipcRenderer.send('set-window-size', key, size),
+  // 查询主窗口当前尺寸（自定义尺寸弹窗用）
+  getWindowSize: () => ipcRenderer.invoke('get-window-size'),
+  // 主窗口渲染层上报 CSS 视口尺寸（innerWidth/innerHeight）
+  reportWindowSize: (size) => ipcRenderer.send('report-window-size', size),
+  // 主窗口尺寸变化通知（自定义尺寸弹窗实时同步）
+  onWindowResized: (callback) => {
+    const listener = (_event, size) => callback(size);
+    ipcRenderer.on('window-resized', listener);
+    return () => ipcRenderer.removeListener('window-resized', listener);
+  },
 
   // 打开独立的设置窗口
   openSettings: () => ipcRenderer.send('open-settings'),

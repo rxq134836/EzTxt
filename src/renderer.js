@@ -75,7 +75,7 @@
     { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
     { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
   ];
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
   let enterMiniTimer = null;
@@ -1220,7 +1220,13 @@
       applyBgImage(settings.bgImage);
       applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
       updateCloseButtonTitle();            // 关闭按钮提示跟随设置
-      if (api.setWindowSize) api.setWindowSize(settings.windowSize || 'default'); // 应用窗口尺寸预设
+      if (api.setWindowSize) {
+        if (settings.windowSize === 'custom' && settings.customWindowSize) {
+          api.setWindowSize('custom', settings.customWindowSize); // 自定义尺寸
+        } else {
+          api.setWindowSize(settings.windowSize || 'default');
+        }
+      }
     } catch (_) {
       // 设置加载失败时保留默认外观
     } finally {
@@ -1627,6 +1633,16 @@
         });
       });
     }
+
+    // 上报 CSS 视口尺寸（innerWidth/innerHeight）给主进程：
+    // 设置窗口的自定义尺寸弹窗用它在主窗口调整大小时实时同步数值。
+    function reportViewportSize() {
+      if (!api.reportWindowSize) return;
+      api.reportWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+    window.addEventListener('resize', reportViewportSize);
+    // 初始上报一次（等布局稳定）
+    setTimeout(reportViewportSize, 300);
 
     window.addEventListener('beforeunload', () => {
       if (isDirty) {

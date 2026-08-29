@@ -127,6 +127,10 @@
               <span class="ws-preview ws-portrait"></span>
               <span class="ws-label">长竖屏</span>
             </button>
+            <button class="window-size-btn" type="button" data-size="custom">
+              <span class="ws-preview ws-custom"></span>
+              <span class="ws-label">自定义</span>
+            </button>
           </div>
         </div>
       </section>
@@ -167,6 +171,29 @@
           <p class="storage-hint" id="storageHint"></p>
         </div>
       </section>
+    </div>
+  </div>
+
+  <!-- 自定义窗口尺寸弹窗：输入宽高 -->
+  <div class="confirm-mask hidden" id="customSizeMask">
+    <div class="confirm-card custom-size-card">
+      <h3>自定义窗口大小</h3>
+      <p class="confirm-text">输入窗口宽度与高度（像素，最小 380×380）。</p>
+      <div class="custom-size-inputs">
+        <label class="custom-size-field">
+          <span>宽度</span>
+          <input type="number" id="customSizeWidth" min="380" max="1200" step="10" value="560" />
+        </label>
+        <span class="custom-size-x">×</span>
+        <label class="custom-size-field">
+          <span>高度</span>
+          <input type="number" id="customSizeHeight" min="380" max="900" step="10" value="620" />
+        </label>
+      </div>
+      <div class="confirm-actions">
+        <button class="tb-btn" id="btnCustomSizeCancel" type="button">取消</button>
+        <button class="tb-btn" id="btnCustomSizeSave" type="button">保存</button>
+      </div>
     </div>
   </div>
 
