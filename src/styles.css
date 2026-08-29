@@ -1097,6 +1097,83 @@ body.is-batch-mode .task-card * {
   color: var(--ink-soft);
   flex-shrink: 0;
 }
+
+/* 背景历史「删除选中」：默认即显示删除样式，不依赖 hover */
+#btnDeleteBg.tb-btn.danger {
+  background: rgba(217, 83, 79, 0.12);
+  color: var(--danger);
+  border: 1px solid rgba(217, 83, 79, 0.35);
+}
+#btnDeleteBg.tb-btn.danger:hover {
+  background: var(--danger);
+  color: #fff;
+  border-color: transparent;
+}
+
+/* 最近上传背景历史（缩略图） */
+.bg-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 管理模式操作行（取消 / 删除选中）：缩略图右下角，仅管理时显示 */
+.bg-manage-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+.bg-manage-actions.hidden { display: none; }
+.bg-history-hint {
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--ink-mute);
+}
+.bg-thumb {
+  position: relative;
+  width: 45px;
+  height: 80px; /* 9:16 竖版长方形（45:80 = 0.5625） */
+  border-radius: 6px;
+  border: 2px solid var(--card-border);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 120ms var(--ease-out), border-color 120ms ease, box-shadow 120ms ease;
+}
+.bg-thumb:hover { transform: scale(1.08); border-color: var(--ink-mute); }
+.bg-thumb.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.35);
+}
+/* 管理模式：多选删除 —— 右上角常驻圆形空白勾选框，提示可点选 */
+.bg-history.is-managing .bg-thumb:hover { transform: scale(1.03); }
+.bg-thumb.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.35);
+}
+.bg-history.is-managing .bg-thumb::after {
+  content: "";
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  border: 2px solid var(--accent);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+.bg-history.is-managing .bg-thumb.is-selected::after {
+  content: "✓";
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .bg-opacity-wrap input[type="range"] {
   flex: 1;
   accent-color: var(--accent);

@@ -16,6 +16,7 @@
   const btnUploadBg = $('#btnUploadBg');
   const btnRemoveBg = $('#btnRemoveBg');
   const bgOpacitySlider = $('#bgOpacity');
+  const bgOpacityValueEl = $('#bgOpacityValue');
   const bgFileInput = $('#bgFileInput');
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
@@ -75,7 +76,21 @@
     api.saveSettings({ fontSize: v });
   }
 
-  // ===== 背景图 =====
+  // ===== 背景图（含最近上传历史，最多 10 张） =====
+  const BG_HISTORY_MAX = 10;
+  const bgHistoryEl = $('#bgHistory');
+  const btnManageBg = $('#btnManageBg');
+  const btnDeleteBg = $('#btnDeleteBg');
+  const confirmMask = $('#confirmMask');
+  const confirmText = $('#confirmText');
+  const btnConfirmOk = $('#btnConfirmOk');
+  const btnConfirmCancel = $('#btnConfirmCancel');
+
+  let bgManageMode = false;      // 历史列表管理模式（批量选择删除）
+  let bgSelected = new Set();    // 选中的背景图 dataURL
+  const bgManageActions = $('#bgManageActions');
+  const btnBgCancel = $('#btnBgCancel');
+
   function applyBgImage(dataURL) {
     if (dataURL) {
       settings.bgImage = dataURL;
@@ -84,20 +99,57 @@
     }
   }
 
+  /**
+   * 读取图片并压缩为 dataURL（最长边 ≤1600px，JPEG 0.85）。
+   * 压缩后再入历史，避免 10 张原图把 settings.json 撑爆。
+   */
+  function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1600;
+          let { width, height } = img;
+          if (width > MAX || height > MAX) {
+            const scale = MAX / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.85));
+        };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
   function handleBgUpload() {
     bgFileInput.click();
   }
 
-  function onBgFileSelected(e) {
+  async function onBgFileSelected(e) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataURL = reader.result;
+    try {
+      const dataURL = await fileToDataURL(file);
+      // 新图放到最前；去重；超过 10 张丢弃最旧的（FIFO）
+      const history = [dataURL, ...(settings.bgHistory || []).filter((u) => u !== dataURL)]
+        .slice(0, BG_HISTORY_MAX);
+      settings.bgHistory = history;
       applyBgImage(dataURL);
-      api.saveSettings({ bgImage: dataURL });
-    };
-    reader.readAsDataURL(file);
+      renderBgHistory();
+      api.saveSettings({ bgImage: dataURL, bgHistory: history });
+    } catch (err) {
+      console.error('背景图处理失败：', err);
+    }
     e.target.value = '';
   }
 
@@ -106,12 +158,98 @@
     api.saveSettings({ bgImage: null });
   }
 
+  /** 渲染最近上传缩略图；正常模式点击切换，管理模式点击多选 */
+  function renderBgHistory() {
+    const list = settings.bgHistory || [];
+    bgHistoryEl.innerHTML = '';
+    if (list.length === 0) {
+      const hint = document.createElement('span');
+      hint.className = 'bg-history-hint';
+      hint.textContent = '暂无历史背景，上传后会显示在这里';
+      bgHistoryEl.appendChild(hint);
+      updateBgManageUI();
+      return;
+    }
+    for (const url of list) {
+      const thumb = document.createElement('button');
+      thumb.type = 'button';
+      thumb.className = 'bg-thumb' + (url === settings.bgImage ? ' is-active' : '');
+      thumb.dataset.url = url;
+      thumb.title = url === settings.bgImage ? '当前背景' : '点击切换为此背景';
+      thumb.style.backgroundImage = `url(${url})`;
+      thumb.addEventListener('click', () => {
+        if (bgManageMode) {
+          toggleBgSelect(url);
+          return;
+        }
+        if (url === settings.bgImage) return;
+        applyBgImage(url);
+        renderBgHistory();
+        api.saveSettings({ bgImage: url });
+      });
+      bgHistoryEl.appendChild(thumb);
+    }
+    updateBgManageUI();
+  }
+
+  /** 管理模式：切换选中 */
+  function toggleBgSelect(url) {
+    if (bgSelected.has(url)) bgSelected.delete(url);
+    else bgSelected.add(url);
+    updateBgManageUI();
+  }
+
+  /** 刷新管理模式 UI：删除按钮可见/计数 + 缩略图选中样式 */
+  function updateBgManageUI() {
+    const n = bgSelected.size;
+    btnDeleteBg.classList.toggle('hidden', n === 0);
+    btnDeleteBg.textContent = `删除选中 (${n})`;
+    bgHistoryEl.querySelectorAll('.bg-thumb').forEach((t) => {
+      t.classList.toggle('is-selected', bgSelected.has(t.dataset.url));
+    });
+  }
+
+  function toggleBgManageMode() {
+    bgManageMode = !bgManageMode;
+    bgSelected.clear();
+    bgHistoryEl.classList.toggle('is-managing', bgManageMode);
+    btnManageBg.classList.toggle('is-active', bgManageMode);
+    bgManageActions.classList.toggle('hidden', !bgManageMode);
+    updateBgManageUI();
+  }
+
+  function openBgDeleteConfirm() {
+    const n = bgSelected.size;
+    if (n === 0) return;
+    confirmText.textContent = `确定要删除选中的 ${n} 张背景图吗？删除后无法恢复。`;
+    confirmMask.classList.remove('hidden');
+    btnConfirmOk.focus();
+  }
+
+  function closeBgConfirm() {
+    confirmMask.classList.add('hidden');
+  }
+
+  /** 确认删除选中的历史背景；当前背景被删则移除背景 */
+  function doBgDelete() {
+    const urls = [...bgSelected];
+    closeBgConfirm();
+    settings.bgHistory = (settings.bgHistory || []).filter((u) => !urls.includes(u));
+    if (settings.bgImage && urls.includes(settings.bgImage)) {
+      settings.bgImage = null;
+    }
+    if (bgManageMode) toggleBgManageMode();
+    renderBgHistory();
+    api.saveSettings({ bgImage: settings.bgImage, bgHistory: settings.bgHistory });
+  }
+
   // 透明度滑杆拖动会高频触发 input → 防抖后再保存（主进程写入队列兜底防并发损坏）
   let bgOpacityTimer = null;
   function onBgOpacityChange() {
     if (isLoadingSettings) return;
     const v = parseFloat(bgOpacitySlider.value);
     settings.bgOpacity = v;
+    bgOpacityValueEl.textContent = v.toFixed(2);
     clearTimeout(bgOpacityTimer);
     bgOpacityTimer = setTimeout(() => api.saveSettings({ bgOpacity: v }), 150);
   }
@@ -249,8 +387,14 @@
       document.body.dataset.theme = settings.theme;
       applyFontSize(settings.fontSize);
       bgOpacitySlider.value = String(settings.bgOpacity);
+      bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
+      // 历史兼容：老配置只有 bgImage 没有 bgHistory → 用当前图初始化
+      if (!Array.isArray(settings.bgHistory) || settings.bgHistory.length === 0) {
+        settings.bgHistory = settings.bgImage ? [settings.bgImage] : [];
+      }
       renderThemeSwatches();
       renderShortcutList();
+      renderBgHistory();
     } catch (_) {
       renderThemeSwatches();
       renderShortcutList();
@@ -266,6 +410,26 @@
   btnRemoveBg.addEventListener('click', handleBgRemove);
   bgFileInput.addEventListener('change', onBgFileSelected);
   bgOpacitySlider.addEventListener('input', onBgOpacityChange);
+
+  // 背景历史批量管理
+  btnManageBg.addEventListener('click', toggleBgManageMode);
+  btnBgCancel.addEventListener('click', toggleBgManageMode);
+  btnDeleteBg.addEventListener('click', openBgDeleteConfirm);
+  btnConfirmOk.addEventListener('click', doBgDelete);
+  btnConfirmCancel.addEventListener('click', closeBgConfirm);
+  confirmMask.addEventListener('click', (e) => {
+    if (e.target === confirmMask) closeBgConfirm();
+  });
+
+  // Esc：关闭确认框 → 退出背景管理模式
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!confirmMask.classList.contains('hidden')) {
+      closeBgConfirm();
+    } else if (bgManageMode) {
+      toggleBgManageMode();
+    }
+  });
 
   loadSettingsState();
 })();

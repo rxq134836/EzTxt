@@ -191,7 +191,8 @@ function enqueueWrite(fn) {
 
 const DEFAULT_SETTINGS = {
   theme: 'blue',          // 主题 key
-  bgImage: null,          // dataURL 或 null（背景图由渲染层 FileReader 读成 base64 直接存）
+  bgImage: null,          // 当前背景图 dataURL（渲染层压缩后存入）
+  bgHistory: [],          // 最近上传的背景图列表（新→旧，最多 10 张，dataURL）
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
   fontSize: 13,           // 页面基础字体大小（px），设置页滑杆控制
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）

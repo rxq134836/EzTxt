@@ -43,6 +43,15 @@
 
         <div class="settings-block">
           <div class="settings-label-row">
+            <span class="settings-label">透明度</span>
+            <span class="settings-value" id="bgOpacityValue">0.35</span>
+          </div>
+          <input type="range" id="bgOpacity" min="0.1" max="0.9" step="0.05" value="0.35" />
+          <div class="range-labels"><span>浅</span><span>深</span></div>
+        </div>
+
+        <div class="settings-block">
+          <div class="settings-label-row">
             <span class="settings-label">背景图</span>
           </div>
           <div class="bg-controls">
@@ -53,12 +62,22 @@
             <button class="tb-btn" id="btnRemoveBg" type="button">
               <span>移除背景</span>
             </button>
-            <div class="bg-opacity-wrap">
-              <label>透明度</label>
-              <input type="range" id="bgOpacity" min="0.1" max="0.9" step="0.05" value="0.35" />
-            </div>
           </div>
           <input type="file" id="bgFileInput" accept="image/*" class="hidden" />
+        </div>
+
+        <div class="settings-block">
+          <div class="settings-label-row">
+            <span class="settings-label">最近上传的背景</span>
+            <span class="settings-value">最多保留 10 张</span>
+            <button class="tb-btn" id="btnManageBg" type="button">管理</button>
+          </div>
+          <div class="bg-history" id="bgHistory"></div>
+          <!-- 管理模式操作（仅管理时显示）：缩略图右下角 -->
+          <div class="bg-manage-actions hidden" id="bgManageActions">
+            <button class="tb-btn" id="btnBgCancel" type="button">取消</button>
+            <button class="tb-btn danger hidden" id="btnDeleteBg" type="button">删除选中</button>
+          </div>
         </div>
       </section>
 
@@ -67,6 +86,18 @@
         <p class="settings-hint">开关控制启用；点击按键重新绑定（需包含 Ctrl/Alt 组合键），按 Backspace 取消绑定，按 Esc 退出</p>
         <div class="shortcut-list" id="shortcutList"></div>
       </section>
+    </div>
+  </div>
+
+  <!-- 批量删除确认弹窗 -->
+  <div class="confirm-mask hidden" id="confirmMask">
+    <div class="confirm-card">
+      <h3>确认删除</h3>
+      <p class="confirm-text" id="confirmText"></p>
+      <div class="confirm-actions">
+        <button class="tb-btn" id="btnConfirmCancel" type="button">取消</button>
+        <button class="tb-btn danger" id="btnConfirmOk" type="button">删除</button>
+      </div>
     </div>
   </div>
 
