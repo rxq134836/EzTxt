@@ -207,6 +207,11 @@ body[data-material="opaque"] .app {
   -webkit-backdrop-filter: none;
   border-color: rgba(var(--ink-rgb), 0.1);
 }
+/* 经典材质无背景图片：背景图图层彻底隐藏（含 mini 展开/收起动画期间，
+   避免 transform 创建 stacking context 时背景图浮到实心背景之上闪现） */
+body[data-material="opaque"] .bg-image-layer {
+  display: none !important;
+}
 
 /* 材质：亚克力 —— 低透明度主题背景着色 + 强模糊（模拟 Windows 亚克力磨砂玻璃观感；
    模糊强度由 --acrylic-blur 驱动（设置页「磨砂感」滑杆）；

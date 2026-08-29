@@ -1130,13 +1130,14 @@
 
   function exitMiniMode(edge) {
     isMiniMode = false;
-    // 1) 立即恢复 .app 显示、隐藏 miniBar，并准备展开动画（scale 0）
-    document.body.classList.remove('is-mini');
-    miniBar.classList.add('hidden');
     clearTimeout(enterMiniTimer);
     const userMaterial = document.body.dataset.material || 'opaque';
-    // 展开动画期间强制经典材质：主页以实心样式放大，避免半透明闪现
+    // 展开动画期间强制经典材质：主页以实心样式放大，避免半透明闪现。
+    // 必须先切换材质再恢复 .app 显示（remove is-mini），否则 .app 恢复显示的第一帧
+    // 仍带着用户材质（半透明/背景图）渲染，造成闪一下。
     document.body.dataset.material = 'opaque';
+    document.body.classList.remove('is-mini');
+    miniBar.classList.add('hidden');
     // 展开原点：从贴近 mini 球的角释放（边缘方向决定）
     //   左边缘 → 左下角；右边缘 → 右下角；上边缘 → 左上角；下边缘 → 左下角
     let origin = 'left bottom';
