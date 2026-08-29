@@ -98,6 +98,24 @@
       <span class="save-time" id="saveTime">尚未保存</span>
     </footer>
 
+    <!-- 批量删除确认弹窗 -->
+    <div class="confirm-mask hidden" id="confirmMask">
+      <div class="confirm-card">
+        <h3>确认删除</h3>
+        <p class="confirm-text" id="confirmText"></p>
+        <div class="confirm-actions">
+          <button class="tb-btn" id="btnConfirmCancel" type="button">取消</button>
+          <button class="tb-btn danger" id="btnConfirmOk" type="button">删除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 批量删除浮动按钮（右下角，仅批量模式显示；未选择时禁用） -->
+    <button class="batch-delete-btn hidden is-disabled" id="btnBatchDelete" type="button">
+      <svg viewBox="0 0 16 16" width="15" height="15"><path d="M3 5h10M6 5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M4 5l.7 9a1 1 0 0 0 1 1h4.6a1 1 0 0 0 1-1L12 5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="batchDeleteLabel">删除选中</span>
+    </button>
+
     <!-- 帮助面板 -->
     <div class="help-panel hidden" id="helpPanel">
       <div class="help-card">

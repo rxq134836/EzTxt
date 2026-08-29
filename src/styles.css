@@ -654,6 +654,104 @@ html, body {
 @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
 .save-time { font-variant-numeric: tabular-nums; }
 
+/* ========= 批量删除 ========= */
+body.is-batch-mode .task-card { cursor: pointer; }
+.task-card.is-batch-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+/* 选中角标 */
+.task-card.is-batch-selected::after {
+  content: "✓";
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  z-index: 5;
+}
+
+/* 右下角浮动「删除选中」按钮 */
+.batch-delete-btn {
+  position: fixed;
+  right: 16px;
+  bottom: 44px;
+  z-index: 300;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: calc(var(--font-size) + 0px);
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(217, 83, 79, 0.35);
+  transition: transform 120ms var(--ease-out), opacity 150ms ease;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.batch-delete-btn:hover:not(.is-disabled) { transform: scale(1.03); }
+.batch-delete-btn:active:not(.is-disabled) { transform: scale(0.97); }
+.batch-delete-btn.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ========= 确认弹窗 ========= */
+.confirm-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 25, 10, 0.28);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.confirm-mask.hidden { display: none; }
+.confirm-card {
+  background: var(--bg-solid);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 12px;
+  padding: 18px 22px;
+  max-width: 320px;
+  width: 90%;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+.confirm-card h3 { margin: 0 0 10px; font-size: calc(var(--font-size) + 2px); }
+.confirm-text {
+  margin: 0 0 16px;
+  font-size: var(--font-size);
+  line-height: 1.6;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.confirm-actions .tb-btn {
+  font-size: var(--font-size);
+  padding: 6px 14px;
+}
+
 /* ========= Help panel ========= */
 .help-panel {
   position: absolute;

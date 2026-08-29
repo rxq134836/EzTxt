@@ -43,6 +43,12 @@
   const miniBar = $('#miniBar');
   const miniCount = $('#miniCount');
   const bgImageLayer = $('#bgImageLayer');
+  const btnBatchDelete = $('#btnBatchDelete');
+  const batchDeleteLabel = $('#batchDeleteLabel');
+  const confirmMask = $('#confirmMask');
+  const confirmText = $('#confirmText');
+  const btnConfirmOk = $('#btnConfirmOk');
+  const btnConfirmCancel = $('#btnConfirmCancel');
 
   // ===== 应用状态 =====
   /**
@@ -448,6 +454,76 @@
   }
 
   // ============================================================
+  //  批量删除（工具栏「删除」进入批量选择 → 右下角按钮 → 二次确认）
+  // ============================================================
+
+  let batchMode = false;          // 是否处于批量选择模式
+  let batchSelected = new Set();  // 批量选中的任务 id
+
+  function enterBatchMode() {
+    if (batchMode) return;
+    batchMode = true;
+    batchSelected.clear();
+    document.body.classList.add('is-batch-mode');
+    btnDelete.classList.add('is-active');
+    updateBatchUI();
+  }
+
+  function exitBatchMode() {
+    if (!batchMode) return;
+    batchMode = false;
+    batchSelected.clear();
+    document.body.classList.remove('is-batch-mode');
+    btnDelete.classList.remove('is-active');
+    // 清除卡片上的批量选中样式
+    taskListEl.querySelectorAll('.task-card.is-batch-selected').forEach((el) => {
+      el.classList.remove('is-batch-selected');
+    });
+    updateBatchUI();
+  }
+
+  function toggleBatchSelect(id) {
+    if (!batchMode) return;
+    if (batchSelected.has(id)) {
+      batchSelected.delete(id);
+    } else {
+      batchSelected.add(id);
+    }
+    const el = cardElById(id);
+    if (el) el.classList.toggle('is-batch-selected', batchSelected.has(id));
+    updateBatchUI();
+  }
+
+  /** 刷新右下角浮动按钮：未选择时禁用 */
+  function updateBatchUI() {
+    const n = batchSelected.size;
+    btnBatchDelete.classList.toggle('hidden', !batchMode);
+    batchDeleteLabel.textContent = n > 0 ? `删除选中 (${n})` : '删除选中';
+    btnBatchDelete.classList.toggle('is-disabled', n === 0);
+  }
+
+  /** 弹出二次确认框 */
+  function openBatchDeleteConfirm() {
+    const n = batchSelected.size;
+    if (n === 0) return;
+    confirmText.textContent = `确定要删除选中的 ${n} 个任务吗？此操作不可恢复。`;
+    confirmMask.classList.remove('hidden');
+    btnConfirmOk.focus();
+  }
+
+  function closeBatchDeleteConfirm() {
+    confirmMask.classList.add('hidden');
+  }
+
+  /** 确认后执行批量删除并退出批量模式 */
+  function doBatchDelete() {
+    const ids = [...batchSelected];
+    closeBatchDeleteConfirm();
+    for (const id of ids) deleteItem(id);
+    exitBatchMode();
+  }
+
+  // ============================================================
   //  自动保存
   // ============================================================
 
@@ -655,6 +731,14 @@
     const li = target.closest('.task-card');
     if (!li) return;
 
+    // 批量选择模式：点击卡片切换选中（整卡为选择目标）
+    if (batchMode) {
+      toggleBatchSelect(li.dataset.id);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
     // 选中
     selectedId = li.dataset.id;
     updateSelection();
@@ -777,8 +861,8 @@
       toggleHelp();
       return;
     }
-    // Backspace：删除选中
-    if (e.key === 'Backspace') {
+    // Backspace：删除选中（批量模式下禁用，避免误删）
+    if (e.key === 'Backspace' && !batchMode) {
       const ae = document.activeElement;
       const focusTag = ae && ae.tagName;
       const isEditing = focusTag === 'INPUT' || focusTag === 'TEXTAREA' || (ae && ae.isContentEditable);
@@ -787,9 +871,13 @@
         deleteSelected();
       }
     }
-    // Esc：关闭帮助 / 搜索条
+    // Esc：关闭确认框 / 退出批量选择 / 关闭帮助 / 搜索条
     if (e.key === 'Escape') {
-      if (!helpPanel.classList.contains('hidden')) {
+      if (!confirmMask.classList.contains('hidden')) {
+        closeBatchDeleteConfirm();
+      } else if (batchMode) {
+        exitBatchMode();
+      } else if (!helpPanel.classList.contains('hidden')) {
         toggleHelp(false);
       } else if (!searchbarEl.classList.contains('hidden')) {
         toggleSearch(false);
@@ -912,7 +1000,22 @@
     btnAdd.addEventListener('click', () => addTask());
     btnAddEmpty.addEventListener('click', () => addTask());
     btnDivider.addEventListener('click', () => addDivider());
-    btnDelete.addEventListener('click', () => deleteSelected());
+    btnDelete.addEventListener('click', () => {
+      // 进入/退出批量选择模式
+      if (batchMode) exitBatchMode();
+      else enterBatchMode();
+    });
+
+    // 批量删除：右下角浮动按钮（未选择时禁用）→ 二次确认
+    btnBatchDelete.addEventListener('click', () => {
+      if (batchSelected.size === 0) return;
+      openBatchDeleteConfirm();
+    });
+    btnConfirmOk.addEventListener('click', () => doBatchDelete());
+    btnConfirmCancel.addEventListener('click', () => closeBatchDeleteConfirm());
+    confirmMask.addEventListener('click', (e) => {
+      if (e.target === confirmMask) closeBatchDeleteConfirm();
+    });
     btnSearch.addEventListener('click', () => toggleSearch());
     searchClearBtn.addEventListener('click', () => {
       searchInputEl.value = '';
