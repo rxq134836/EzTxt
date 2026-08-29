@@ -181,6 +181,9 @@ contextBridge.exposeInMainWorld('api', {
   // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
   setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 
+  // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
+  setWindowSize: (key) => ipcRenderer.send('set-window-size', key),
+
   // 打开独立的设置窗口
   openSettings: () => ipcRenderer.send('open-settings'),
   // 设置被修改时（主进程广播，主窗口即时重新加载应用）

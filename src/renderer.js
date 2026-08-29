@@ -75,7 +75,7 @@
     { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
     { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
   ];
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
   let enterMiniTimer = null;
@@ -1220,6 +1220,7 @@
       applyBgImage(settings.bgImage);
       applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
       updateCloseButtonTitle();            // 关闭按钮提示跟随设置
+      if (api.setWindowSize) api.setWindowSize(settings.windowSize || 'default'); // 应用窗口尺寸预设
     } catch (_) {
       // 设置加载失败时保留默认外观
     } finally {

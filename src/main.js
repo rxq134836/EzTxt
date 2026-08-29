@@ -205,6 +205,13 @@ const DEFAULT_SETTINGS = {
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
+    italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false },
+    inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false },
+    codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false },
+    orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false },
+    unorderedList: { enabled: true, key: ']', ctrl: true,  shift: true,  alt: false }
+  }
+};
 
 // 主窗口尺寸预设（设置页「外观 → 窗口比例」选择）
 const WINDOW_SIZES = {
@@ -213,13 +220,6 @@ const WINDOW_SIZES = {
   'landscape':      { width: 640, height: 460 },   // 横屏
   'portrait-narrow':{ width: 420, height: 700 },   // 窄竖屏
   'portrait':       { width: 480, height: 760 }    // 长竖屏
-};
-    italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false },
-    inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false },
-    codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false },
-    orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false },
-    unorderedList: { enabled: true, key: ']', ctrl: true,  shift: true,  alt: false }
-  }
 };
 
 /** 合并设置：shortcuts 逐项合并，保证老配置缺项时用默认值兜底 */
@@ -681,6 +681,14 @@ function registerIpc() {
     try {
       mainWindow.setBackgroundMaterial(currentMaterial === 'acrylic' ? 'acrylic' : 'none');
     } catch (_) { /* 系统不支持时忽略（如 Windows 10） */ }
+  });
+
+  // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
+  ipcMain.on('set-window-size', (_e, key) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (isSnapped) return; // mini 态不调整
+    const size = WINDOW_SIZES[key] || WINDOW_SIZES['default'];
+    mainWindow.setSize(size.width, size.height);
   });
 
   // ===== 数据保存位置 =====

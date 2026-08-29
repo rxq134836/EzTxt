@@ -13,6 +13,7 @@
   const themeSwatches = $('#themeSwatches');
   const materialOptionsEl = $('#materialOptions');
   const closeActionOptionsEl = $('#closeActionOptions');
+  const windowSizeOptionsEl = $('#windowSizeOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
   const acrylicBlurBlock = $('#acrylicBlurBlock');
   const acrylicBlurSlider = $('#acrylicBlur');
@@ -27,7 +28,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -125,6 +126,31 @@
     if (action === settings.closeAction) return;
     applyCloseAction(action);
     api.saveSettings({ closeAction: settings.closeAction });
+  }
+
+  // ===== 主窗口尺寸预设（外观 → 窗口比例） =====
+  const WINDOW_SIZE_KEYS = ['default', 'landscape-wide', 'landscape', 'portrait-narrow', 'portrait'];
+
+  function applyWindowSize(key) {
+    const val = WINDOW_SIZE_KEYS.includes(key) ? key : 'default';
+    settings.windowSize = val;
+    renderWindowSizeOptions();
+  }
+
+  function renderWindowSizeOptions() {
+    windowSizeOptionsEl.querySelectorAll('.window-size-btn').forEach((btn) => {
+      const active = btn.dataset.size === settings.windowSize;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  function onWindowSizeSelect(key) {
+    if (key === settings.windowSize) return;
+    applyWindowSize(key);
+    api.saveSettings({ windowSize: settings.windowSize });
+    // 实时调整主窗口尺寸
+    if (api.setWindowSize) api.setWindowSize(key);
   }
 
   // ===== 亚克力磨砂强度 =====
@@ -486,6 +512,7 @@
       applyMaterial(settings.material);   // 材质（含透明度/磨砂感设置显隐）
       applyAcrylicBlur(settings.acrylicBlur); // 磨砂强度（仅亚克力生效）
       applyCloseAction(settings.closeAction); // 关闭按钮行为
+      applyWindowSize(settings.windowSize);   // 窗口比例预设
       bgOpacitySlider.value = String(settings.bgOpacity);
       bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
       // 历史兼容：老配置只有 bgImage 没有 bgHistory → 用当前图初始化
@@ -550,6 +577,10 @@
   closeActionOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.close) onCloseActionSelect(btn.dataset.close);
+  });
+  windowSizeOptionsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.window-size-btn');
+    if (btn && btn.dataset.size) onWindowSizeSelect(btn.dataset.size);
   });
   acrylicBlurSlider.addEventListener('input', onAcrylicBlurChange);
   fontSizeSliderEl.addEventListener('input', onFontSizeChange);

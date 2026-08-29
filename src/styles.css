@@ -1160,6 +1160,55 @@ body[data-material="acrylic"] .settings-window {
   display: flex;
   gap: 8px;
 }
+/* 窗口比例（虚线方块预览：横屏宽、竖屏高、默认近方形） */
+.window-size-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.window-size-btn {
+  flex: 1 1 calc(33.333% - 6px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: calc(var(--font-size) - 1px);
+  cursor: pointer;
+  transition: background 0.15s var(--ease-out), border-color 0.15s var(--ease-out),
+    color 0.15s var(--ease-out), transform 0.1s var(--ease-out);
+}
+.window-size-btn:hover { background: var(--hover-bg); }
+.window-size-btn:active { transform: scale(0.97); }
+.window-size-btn.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+/* 虚线方块：长宽比反映窗口形状 */
+.ws-preview {
+  display: block;
+  border: 1.5px dashed var(--ink-mute);
+  border-radius: 3px;
+  transition: border-color 0.15s var(--ease-out);
+  height: 34px;
+}
+.window-size-btn.is-active .ws-preview {
+  border-style: solid;
+  border-color: var(--accent);
+}
+/* 各比例形状（以高度 34px 为基准，宽高比近似真实窗口） */
+.ws-default        { width: 31px; }  /* 560×620 近方形 */
+.ws-landscape-wide { width: 54px; }  /* 820×500 宽横屏 */
+.ws-landscape      { width: 47px; }  /* 640×460 横屏 */
+.ws-portrait-narrow{ width: 20px; }  /* 420×700 窄竖屏 */
+.ws-portrait       { width: 24px; }  /* 480×760 长竖屏 */
 .material-btn {
   flex: 1 1 0;
   padding: 8px 0;
