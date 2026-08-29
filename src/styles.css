@@ -9,8 +9,9 @@
 :root {
   /* 非主题变量（所有主题共用） */
   --radius: 14px;
-  --shadow: 0 18px 40px rgba(60, 50, 20, 0.25), 0 2px 6px rgba(60, 50, 20, 0.14);
-  --shadow-mini: 0 8px 20px rgba(60, 50, 20, 0.2);
+  /* 阴影尽量贴紧卡片，避免在透明窗口上向圆角外晕出灰色 */
+  --shadow: 0 2px 10px rgba(60, 50, 20, 0.12), 0 1px 3px rgba(60, 50, 20, 0.08);
+  --shadow-mini: 0 4px 12px rgba(60, 50, 20, 0.18);
   --danger: #d9534f;
   --ok: #6dbe45;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);

@@ -434,17 +434,47 @@ function clampToWorkArea(bounds, wa) {
 }
 
 /**
- * 执行缩小动作：先发 IPC 让渲染层隐藏 .app，再延迟缩窗（防 race 漏出）
+ * 平滑动画窗口 bounds（主进程无 rAF，用 setTimeout 模拟 60fps；easeOutCubic 缓动，
+ * 与界面 --ease-out 的观感一致 —— 起步快、收尾缓）。
+ * @param {object} from 起始 bounds {x,y,width,height}
+ * @param {object} to 目标 bounds
+ * @param {number} [duration] 毫秒，默认 200
+ * @param {Function} [onDone] 动画完成回调
+ */
+function animateWindowBounds(from, to, duration = 200, onDone = null) {
+  if (!mainWindow || mainWindow.isDestroyed()) { if (onDone) onDone(); return; }
+  const start = Date.now();
+  const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+  const step = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) { if (onDone) onDone(); return; }
+    const t = Math.min(1, (Date.now() - start) / duration);
+    const e = easeOut(t);
+    mainWindow.setBounds({
+      x: Math.round(from.x + (to.x - from.x) * e),
+      y: Math.round(from.y + (to.y - from.y) * e),
+      width: Math.round(from.width + (to.width - from.width) * e),
+      height: Math.round(from.height + (to.height - from.height) * e)
+    });
+    if (t < 1) {
+      setTimeout(step, 16);
+    } else if (onDone) {
+      onDone();
+    }
+  };
+  step();
+}
+
+/**
+ * 执行缩小动作：先发 IPC 让渲染层隐藏 .app，再平滑缩窗（防 race 漏出）
  * 同时把 mini 球设为置顶(高于桌面其他窗口),退出 mini 态时恢复用户原置顶设置。
  */
 function doSnapResize(nx, ny) {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.webContents.send('pin-toggled', true); // 通知渲染层 pin 按钮高亮
   mainWindow.webContents.send('snap-state-changed', true);
-  setTimeout(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: MINI_SIZE, height: MINI_SIZE });
-  }, 80);
+  const from = mainWindow.getBounds();
+  const to = { x: Math.round(nx), y: Math.round(ny), width: MINI_SIZE, height: MINI_SIZE };
+  animateWindowBounds(from, to, 180);
 }
 
 function checkSnapDebounced() {
@@ -492,9 +522,6 @@ function enterMini() {
 function exitSnapped() {
   if (!isSnapped || !mainWindow) return;
 
-  // 先取消 mini 态强制置顶(恢复用户原本的 isPinned 设置)
-  applyPinState(); // 内部用 isPinned(用户设置)决定是否置顶
-
   const miniBounds = mainWindow.getBounds();
   const wa = getNearestWorkArea();
 
@@ -540,10 +567,10 @@ function exitSnapped() {
   snapMiniPos = null;
   mainWindow.webContents.send('snap-state-changed', false);
 
-  setTimeout(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    mainWindow.setBounds(targetBounds);
-  }, 60);
+  // 平滑展开：从 mini 球位置动画到目标位置（期间保持置顶，动画结束后恢复用户置顶设置）
+  animateWindowBounds(miniBounds, targetBounds, 200, () => {
+    applyPinState(); // 内部用 isPinned(用户设置)决定是否置顶
+  });
 }
 
 // ======= 托盘 =======
