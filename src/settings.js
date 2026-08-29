@@ -12,6 +12,7 @@
 
   const themeSwatches = $('#themeSwatches');
   const materialOptionsEl = $('#materialOptions');
+  const closeActionOptionsEl = $('#closeActionOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
   const acrylicBlurBlock = $('#acrylicBlurBlock');
   const acrylicBlurSlider = $('#acrylicBlur');
@@ -26,7 +27,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -103,6 +104,27 @@
     if (material === settings.material) return;
     applyMaterial(material);
     api.saveSettings({ material: settings.material });
+  }
+
+  // ===== 关闭按钮行为（缩小到托盘 / 退出软件） =====
+  function applyCloseAction(action) {
+    const val = action === 'quit' ? 'quit' : 'tray';
+    settings.closeAction = val;
+    renderCloseActionOptions();
+  }
+
+  function renderCloseActionOptions() {
+    closeActionOptionsEl.querySelectorAll('.material-btn').forEach((btn) => {
+      const active = btn.dataset.close === settings.closeAction;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  function onCloseActionSelect(action) {
+    if (action === settings.closeAction) return;
+    applyCloseAction(action);
+    api.saveSettings({ closeAction: settings.closeAction });
   }
 
   // ===== 亚克力磨砂强度 =====
@@ -463,6 +485,7 @@
       }
       applyMaterial(settings.material);   // 材质（含透明度/磨砂感设置显隐）
       applyAcrylicBlur(settings.acrylicBlur); // 磨砂强度（仅亚克力生效）
+      applyCloseAction(settings.closeAction); // 关闭按钮行为
       bgOpacitySlider.value = String(settings.bgOpacity);
       bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
       // 历史兼容：老配置只有 bgImage 没有 bgHistory → 用当前图初始化
@@ -523,6 +546,10 @@
   materialOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.material) onMaterialSelect(btn.dataset.material);
+  });
+  closeActionOptionsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.material-btn');
+    if (btn && btn.dataset.close) onCloseActionSelect(btn.dataset.close);
   });
   acrylicBlurSlider.addEventListener('input', onAcrylicBlurChange);
   fontSizeSliderEl.addEventListener('input', onFontSizeChange);

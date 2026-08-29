@@ -34,7 +34,7 @@
               <circle cx="8" cy="8" r="2" fill="currentColor"/>
             </svg>
           </button>
-          <button class="ctrl-btn close-btn" id="closeBtn" title="收起到托盘" type="button">
+          <button class="ctrl-btn close-btn" id="closeBtn" title="关闭软件" type="button">
             <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
               <path d="M3.7 3.7 L12.3 12.3 M12.3 3.7 L3.7 12.3"
                 stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
@@ -97,19 +97,6 @@
       <span class="spacer"></span>
       <span class="save-time" id="saveTime">尚未保存</span>
     </footer>
-
-    <!-- 关闭确认弹窗：选择「关闭软件」或「缩小到托盘」 -->
-    <div class="confirm-mask hidden" id="closeConfirmMask">
-      <div class="confirm-card">
-        <h3>关闭 EzTxt</h3>
-        <p class="confirm-text">选择关闭方式：</p>
-        <div class="confirm-actions column">
-          <button class="tb-btn" id="btnCloseToTray" type="button">缩小到托盘</button>
-          <button class="tb-btn danger" id="btnCloseApp" type="button">关闭软件</button>
-        </div>
-        <p class="confirm-hint" style="margin-top:10px;font-size:calc(var(--font-size) - 2px);color:var(--ink-mute);">缩小到托盘后程序仍在后台运行，可从托盘图标恢复。</p>
-      </div>
-    </div>
 
     <!-- 批量删除确认弹窗 -->
     <div class="confirm-mask hidden" id="confirmMask">

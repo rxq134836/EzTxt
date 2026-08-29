@@ -29,9 +29,6 @@
   const minBtn = $('#minBtn');
   const shrinkBtn = $('#shrinkBtn');
   const closeBtn = $('#closeBtn');
-  const closeConfirmMask = $('#closeConfirmMask');
-  const btnCloseToTray = $('#btnCloseToTray');
-  const btnCloseApp = $('#btnCloseApp');
   const searchbarEl = $('#searchbar');
   const searchInputEl = $('#searchInput');
   const searchClearBtn = $('#searchClear');
@@ -78,7 +75,7 @@
     { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
     { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
   ];
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
   let enterMiniTimer = null;
@@ -1222,6 +1219,7 @@
       applyAcrylicBlur(settings.acrylicBlur); // 应用亚克力磨砂强度
       applyBgImage(settings.bgImage);
       applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
+      updateCloseButtonTitle();            // 关闭按钮提示跟随设置
     } catch (_) {
       // 设置加载失败时保留默认外观
     } finally {
@@ -1300,24 +1298,21 @@
     }, 220);
   }
 
+  /** 关闭按钮悬浮提示跟随设置：缩小到托盘 / 退出软件 */
+  function updateCloseButtonTitle() {
+    closeBtn.title = settings.closeAction === 'quit' ? '关闭软件' : '缩小到托盘';
+  }
+
   function initWindowControls() {
     minBtn.addEventListener('click', () => api.minimize());
     shrinkBtn.addEventListener('click', () => api.enterMini());
-    // 关闭按钮：弹出选择（关闭软件 / 缩小到托盘），不再直接关闭
+    // 关闭按钮：按设置直接执行（缩小到托盘 / 退出软件），不弹窗
     closeBtn.addEventListener('click', () => {
-      closeConfirmMask.classList.remove('hidden');
-      btnCloseToTray.focus();
-    });
-    btnCloseToTray.addEventListener('click', () => {
-      closeConfirmMask.classList.add('hidden');
-      api.close(); // 缩到托盘
-    });
-    btnCloseApp.addEventListener('click', () => {
-      closeConfirmMask.classList.add('hidden');
-      api.quit(); // 真正退出
-    });
-    closeConfirmMask.addEventListener('click', (e) => {
-      if (e.target === closeConfirmMask) closeConfirmMask.classList.add('hidden');
+      if (settings.closeAction === 'quit') {
+        api.quit(); // 退出软件
+      } else {
+        api.close(); // 缩小到托盘
+      }
     });
     pinBtn.addEventListener('click', () => api.togglePin());
 

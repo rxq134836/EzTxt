@@ -200,9 +200,20 @@ const DEFAULT_SETTINGS = {
   bgHistory: [],          // 最近上传的背景图列表（新→旧，最多 10 张，dataURL）
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
   fontSize: 13,           // 页面基础字体大小（px），设置页滑杆控制
+  closeAction: 'tray',    // 主窗口关闭按钮行为：tray（缩小到托盘）/ quit（退出软件）
+  windowSize: 'default',  // 主窗口尺寸预设（见 WINDOW_SIZES）
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
+
+// 主窗口尺寸预设（设置页「外观 → 窗口比例」选择）
+const WINDOW_SIZES = {
+  'default':        { width: 560, height: 620 },   // 默认（当前便签大小）
+  'landscape-wide': { width: 820, height: 500 },   // 宽横屏
+  'landscape':      { width: 640, height: 460 },   // 横屏
+  'portrait-narrow':{ width: 420, height: 700 },   // 窄竖屏
+  'portrait':       { width: 480, height: 760 }    // 长竖屏
+};
     italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false },
     inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false },
     codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false },
