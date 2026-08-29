@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!-- 独立设置窗口：由主窗口「设置」按钮打开（main.js openSettingsWindow） -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>EzTxt 设置</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="amber">
+  <div class="settings-window">
+    <!-- 标题栏：可拖动（app-region: drag） -->
+    <header class="settings-win-header">
+      <h1>EzTxt 设置</h1>
+      <button class="ctrl-btn close-btn" id="winClose" title="关闭" type="button">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path d="M3.7 3.7 L12.3 12.3 M12.3 3.7 L3.7 12.3"
+            stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        </svg>
+      </button>
+    </header>
+
+    <div class="settings-scroll">
+      <section class="settings-section">
+        <h3>外观</h3>
+
+        <div class="settings-block">
+          <div class="settings-label-row">
+            <span class="settings-label">主题颜色</span>
+          </div>
+          <div class="theme-swatches" id="themeSwatches"></div>
+        </div>
+
+        <div class="settings-block">
+          <div class="settings-label-row">
+            <span class="settings-label">页面字体大小</span>
+            <span class="settings-value" id="fontSizeValue">13px</span>
+          </div>
+          <input type="range" id="fontSizeSlider" min="11" max="17" step="0.5" value="13" />
+          <div class="range-labels"><span>小</span><span>大</span></div>
+        </div>
+
+        <div class="settings-block">
+          <div class="settings-label-row">
+            <span class="settings-label">背景图</span>
+          </div>
+          <div class="bg-controls">
+            <button class="tb-btn" id="btnUploadBg" type="button">
+              <svg viewBox="0 0 16 16" width="13" height="13"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/><circle cx="5.5" cy="6" r="1.2" fill="currentColor"/><path d="M2.5 12l3.5-3 2.5 2 2-2 3.5 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/></svg>
+              <span>上传图片</span>
+            </button>
+            <button class="tb-btn" id="btnRemoveBg" type="button">
+              <span>移除背景</span>
+            </button>
+            <div class="bg-opacity-wrap">
+              <label>透明度</label>
+              <input type="range" id="bgOpacity" min="0.1" max="0.9" step="0.05" value="0.35" />
+            </div>
+          </div>
+          <input type="file" id="bgFileInput" accept="image/*" class="hidden" />
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h3>快捷键设置</h3>
+        <p class="settings-hint">开关控制启用；点击按键重新绑定（需包含 Ctrl/Alt 组合键），按 Backspace 取消绑定，按 Esc 退出</p>
+        <div class="shortcut-list" id="shortcutList"></div>
+      </section>
+    </div>
+  </div>
+
+  <script src="settings.js"></script>
+</body>
+</html>

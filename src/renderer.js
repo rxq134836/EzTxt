@@ -39,20 +39,10 @@
   const btnAddEmpty = $('#btnAddEmpty');
   const btnHelp = $('#btnHelp');
   const helpPanel = $('#helpPanel');
-  const btnTheme = $('#btnTheme');
-  const themePanel = $('#themePanel');
-  const themeSwatches = $('#themeSwatches');
   const btnSettings = $('#btnSettings');
-  const settingsPage = $('#settingsPage');
-  const btnSettingsBack = $('#btnSettingsBack');
-  const shortcutListEl = $('#shortcutList');
   const miniBar = $('#miniBar');
   const miniCount = $('#miniCount');
   const bgImageLayer = $('#bgImageLayer');
-  const btnUploadBg = $('#btnUploadBg');
-  const btnRemoveBg = $('#btnRemoveBg');
-  const bgOpacitySlider = $('#bgOpacity');
-  const bgFileInput = $('#bgFileInput');
 
   // ===== 应用状态 =====
   /**
@@ -76,7 +66,7 @@
     { key: 'rose',       name: '酒红', accent: '#954B44', bg: '#F5E5E0', ink: '#3a1f1b' },
     { key: 'sage',       name: '草绿', accent: '#A68329', bg: '#F5F0D4', ink: '#3a2f14' }
   ];
-  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35, shortcuts: {} };
+  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
 
@@ -100,7 +90,6 @@
   };
   // Shift 键产生的字符变化（匹配 Ctrl+Shift+[ 时 e.key 可能是 '{'）
   const SHIFT_CHARS = { '[': '{', ']': '}', '`': '~', ';': ':', "'": '"', ',': '<', '.': '>', '/': '?', '-': '_', '=': '+', '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')' };
-  let capturingShortcut = null; // 正在改绑的快捷键名，null 表示未在改绑
 
   /** 判断按键事件是否匹配某组合 */
   function matchShortcut(combo, e) {
@@ -114,32 +103,6 @@
     if (SHIFT_CHARS[k] && ek === SHIFT_CHARS[k]) return true;       // 绑定 '['，实际按下 '{'
     if (SHIFT_CHARS[ek] === k) return true;                          // 绑定 '{'，实际按下 '['
     return false;
-  }
-
-  /** 组合键显示文本，如 Ctrl+Shift+K */
-  function formatCombo(c) {
-    if (!c || !c.key) return '未绑定';
-    const parts = [];
-    if (c.ctrl) parts.push('Ctrl');
-    if (c.alt) parts.push('Alt');
-    if (c.shift) parts.push('Shift');
-    const k = String(c.key);
-    parts.push(k.length === 1 ? k.toUpperCase() : k);
-    return parts.join('+');
-  }
-
-  /** 生成可持久化的 shortcuts（去掉 label） */
-  function shortcutsPayload() {
-    const out = {};
-    for (const [name, def] of Object.entries(DEFAULT_SHORTCUTS)) {
-      const s = settings.shortcuts[name] || def;
-      out[name] = { enabled: !!s.enabled, key: s.key || '', ctrl: !!s.ctrl, shift: !!s.shift, alt: !!s.alt };
-    }
-    return out;
-  }
-
-  function saveShortcuts() {
-    api.saveSettings({ shortcuts: shortcutsPayload() });
   }
 
   function uid() {
@@ -822,24 +785,19 @@
         deleteSelected();
       }
     }
-    // Esc：关闭帮助 / 设置页 / 主题面板 / 搜索条
+    // Esc：关闭帮助 / 搜索条
     if (e.key === 'Escape') {
       if (!helpPanel.classList.contains('hidden')) {
         toggleHelp(false);
-      } else if (document.body.classList.contains('showing-settings')) {
-        toggleSettingsPage(false);
-      } else if (!themePanel.classList.contains('hidden')) {
-        toggleThemePanel(false);
       } else if (!searchbarEl.classList.contains('hidden')) {
         toggleSearch(false);
       }
     }
-    // Ctrl+,：打开 / 关闭设置页
+    // Ctrl+,：打开独立的设置窗口
     if ((e.ctrlKey || e.metaKey) && e.key === ',') {
       e.preventDefault();
       toggleHelp(false);
-      toggleThemePanel(false);
-      toggleSettingsPage();
+      api.openSettings();
     }
   }
 
@@ -867,140 +825,22 @@
   }
 
   // ============================================================
-  //  主题 & 设置
+  //  主题 & 设置（设置 UI 已移至独立设置窗口 settings.html/settings.js；
+  //  此处仅保留「应用」逻辑：启动加载 / settings-changed 时重新应用）
   // ============================================================
 
-  function toggleThemePanel(force) {
-    const show = typeof force === 'boolean' ? force : themePanel.classList.contains('hidden');
-    themePanel.classList.toggle('hidden', !show);
-    btnTheme.classList.toggle('is-active', show);
-  }
-
-  // ============================================================
-  //  设置页（整页视图）：快捷键开关 / 改绑
-  // ============================================================
-
-  function toggleSettingsPage(force) {
-    const show = typeof force === 'boolean' ? force : !document.body.classList.contains('showing-settings');
-    document.body.classList.toggle('showing-settings', show);
-    btnSettings.classList.toggle('is-active', show);
-    if (show) renderShortcutList();
-    else endShortcutCapture();
-  }
-
-  /** 渲染快捷键列表：每行 = 名称 + 开关 + 按键徽标 */
-  function renderShortcutList() {
-    if (!shortcutListEl) return;
-    shortcutListEl.innerHTML = '';
-    for (const [name, def] of Object.entries(DEFAULT_SHORTCUTS)) {
-      const s = settings.shortcuts[name] || def;
-      const row = document.createElement('div');
-      row.className = 'shortcut-row' + (s.enabled === false ? ' disabled' : '');
-
-      const label = document.createElement('span');
-      label.className = 'shortcut-label';
-      label.textContent = def.label;
-
-      // 启用开关
-      const sw = document.createElement('label');
-      sw.className = 'switch';
-      const input = document.createElement('input');
-      input.type = 'checkbox';
-      input.checked = s.enabled !== false;
-      input.title = '启用 / 停用';
-      const slider = document.createElement('span');
-      slider.className = 'slider';
-      sw.appendChild(input);
-      sw.appendChild(slider);
-      input.addEventListener('change', () => {
-        settings.shortcuts[name] = { ...(settings.shortcuts[name] || def), enabled: input.checked };
-        saveShortcuts();
-        row.classList.toggle('disabled', !input.checked);
-      });
-
-      // 按键徽标（点击改绑）
-      const badge = document.createElement('button');
-      badge.type = 'button';
-      badge.className = 'shortcut-key' + (!s.key ? ' unbound' : '');
-      badge.textContent = s.key ? formatCombo(s) : '未绑定';
-      badge.title = '点击重新绑定';
-      badge.addEventListener('click', () => beginShortcutCapture(name, badge));
-
-      row.appendChild(label);
-      row.appendChild(sw);
-      row.appendChild(badge);
-      shortcutListEl.appendChild(row);
-    }
-  }
-
-  /** 进入改绑模式：捕获下一次按键组合 */
-  function beginShortcutCapture(name, badge) {
-    capturingShortcut = name;
-    document.querySelectorAll('.shortcut-key').forEach((el) => el.classList.remove('capturing'));
-    badge.classList.add('capturing');
-    badge.textContent = '按下组合键…';
-    document.addEventListener('keydown', onShortcutCaptureKeydown, true);
-  }
-
-  function endShortcutCapture() {
-    if (!capturingShortcut) return;
-    capturingShortcut = null;
-    document.removeEventListener('keydown', onShortcutCaptureKeydown, true);
-    renderShortcutList();
-  }
-
-  /** 改绑捕获：Esc 取消；Backspace/Delete 解绑；需 Ctrl/Alt 组合或功能键 */
-  function onShortcutCaptureKeydown(e) {
-    if (!capturingShortcut) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const name = capturingShortcut;
-    if (e.key === 'Escape') { endShortcutCapture(); return; }
-    if (e.key === 'Backspace' || e.key === 'Delete') {
-      settings.shortcuts[name] = { enabled: false, key: '', ctrl: false, shift: false, alt: false };
-      endShortcutCapture();
-      saveShortcuts();
-      return;
-    }
-    const hasMod = e.ctrlKey || e.metaKey || e.altKey;
-    const isFn = /^F\d{1,2}$/i.test(e.key);
-    if (!hasMod && !isFn) {
-      // 无修饰键的普通键不允许（会与正常输入冲突），提示后继续等待
-      const badge = shortcutListEl.querySelector('.shortcut-key.capturing');
-      if (badge) badge.textContent = '需要 Ctrl/Alt 组合';
-      return;
-    }
-    settings.shortcuts[name] = {
-      enabled: true,
-      key: e.key,
-      ctrl: !!(e.ctrlKey || e.metaKey),
-      shift: !!e.shiftKey,
-      alt: !!e.altKey
-    };
-    endShortcutCapture();
-    saveShortcuts();
+  /** 应用页面基础字号（驱动 --font-size 变量） */
+  function applyFontSize(size) {
+    const v = Number.isFinite(size) ? size : 13;
+    settings.fontSize = v;
+    document.documentElement.style.setProperty('--font-size', v + 'px');
   }
 
   function applyTheme(key, persist = true) {
     if (!THEMES.find((t) => t.key === key)) key = 'amber';
     document.body.dataset.theme = key;
     settings.theme = key;
-    renderThemeSwatches();
     if (persist) api.saveSettings({ theme: key });
-  }
-
-  function renderThemeSwatches() {
-    themeSwatches.innerHTML = '';
-    for (const t of THEMES) {
-      const btn = document.createElement('button');
-      btn.className = 'theme-swatch' + (t.key === settings.theme ? ' is-active' : '');
-      btn.type = 'button';
-      btn.title = t.name;
-      btn.style.background = t.bg;
-      btn.innerHTML = `<span class="swatch-accent" style="background:${t.accent}"></span>`;
-      btn.addEventListener('click', () => applyTheme(t.key));
-      themeSwatches.appendChild(btn);
-    }
   }
 
   function applyBgImage(dataURL) {
@@ -1016,38 +856,6 @@
     }
   }
 
-  function handleBgUpload() {
-    bgFileInput.click();
-  }
-
-  function onBgFileSelected(e) {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataURL = reader.result;
-      applyBgImage(dataURL);
-      api.saveSettings({ bgImage: dataURL });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = ''; // 允许重新选同一文件
-  }
-
-  function handleBgRemove() {
-    applyBgImage(null);
-    api.saveSettings({ bgImage: null });
-  }
-
-  function onBgOpacityChange() {
-    if (isLoadingSettings) return;
-    const v = parseFloat(bgOpacitySlider.value);
-    settings.bgOpacity = v;
-    if (settings.bgImage) {
-      bgImageLayer.style.opacity = String(v);
-    }
-    api.saveSettings({ bgOpacity: v });
-  }
-
   async function loadSettingsState() {
     try {
       isLoadingSettings = true;
@@ -1060,9 +868,9 @@
       }
       applyTheme(settings.theme, false);   // 启动加载，不回写磁盘
       applyBgImage(settings.bgImage);
-      bgOpacitySlider.value = String(settings.bgOpacity);
+      applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
     } catch (_) {
-      renderThemeSwatches();
+      // 设置加载失败时保留默认外观
     } finally {
       isLoadingSettings = false;
     }
@@ -1119,27 +927,11 @@
       if (e.target === helpPanel) toggleHelp(false);
     });
 
-    // 主题
-    btnTheme.addEventListener('click', () => {
-      toggleHelp(false);
-      toggleSettingsPage(false);
-      toggleThemePanel();
-    });
-    themePanel.addEventListener('click', (e) => {
-      if (e.target === themePanel) toggleThemePanel(false);
-    });
-
-    // 设置页
+    // 设置：打开独立设置窗口
     btnSettings.addEventListener('click', () => {
       toggleHelp(false);
-      toggleThemePanel(false);
-      toggleSettingsPage();
+      api.openSettings();
     });
-    btnSettingsBack.addEventListener('click', () => toggleSettingsPage(false));
-    btnUploadBg.addEventListener('click', handleBgUpload);
-    btnRemoveBg.addEventListener('click', handleBgRemove);
-    bgFileInput.addEventListener('change', onBgFileSelected);
-    bgOpacitySlider.addEventListener('input', onBgOpacityChange);
 
     // Mini bar: 用 JS 区分点击 vs 拖动(原生 drag region 已移除)
     // 方案: pointer events + screen 坐标 + pointer capture
@@ -1268,14 +1060,6 @@
     taskListEl.addEventListener('paste', onTaskListPaste);
     document.addEventListener('keydown', onGlobalKeyDown);
 
-    // 点击面板外任意处 → 自动收起主题面板
-    document.addEventListener('click', (e) => {
-      if (!themePanel.classList.contains('hidden') &&
-          !themePanel.contains(e.target) && !btnTheme.contains(e.target)) {
-        toggleThemePanel(false);
-      }
-    });
-
     initWindowControls();
     initPinState();
 
@@ -1290,6 +1074,11 @@
     loadSettingsState().finally(() => {
       loadInitial();
     });
+
+    // 设置窗口修改设置后（主题/字号/背景/快捷键）→ 主窗口即时重新应用
+    if (api.onSettingsChanged) {
+      api.onSettingsChanged(() => loadSettingsState());
+    }
 
     window.addEventListener('beforeunload', () => {
       if (isDirty) {

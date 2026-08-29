@@ -61,9 +61,18 @@ contextBridge.exposeInMainWorld('api', {
   loadNote: () => ipcRenderer.invoke('load-note'),
   saveNote: (note) => ipcRenderer.invoke('save-note', note),
 
-  // 设置（主题、背景图）
+  // 设置（主题、背景图、字号、快捷键）
   loadSettings: () => ipcRenderer.invoke('load-settings'),
   saveSettings: (patch) => ipcRenderer.invoke('save-settings', patch),
+
+  // 打开独立的设置窗口
+  openSettings: () => ipcRenderer.send('open-settings'),
+  // 设置被修改时（主进程广播，主窗口即时重新加载应用）
+  onSettingsChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('settings-changed', listener);
+    return () => ipcRenderer.removeListener('settings-changed', listener);
+  },
 
   // Markdown 渲染（在 preload 中执行，避免渲染进程直接持有 marked）
   renderMarkdown: (text) => marked.parse(text == null ? '' : String(text)),

@@ -1,5 +1,50 @@
 {
   "theme": "amber",
   "bgImage": null,
-  "bgOpacity": 0.45
+  "bgOpacity": 0.45,
+  "fontSize": 14,
+  "shortcuts": {
+    "bold": {
+      "enabled": true,
+      "key": "b",
+      "ctrl": true,
+      "shift": false,
+      "alt": false
+    },
+    "italic": {
+      "enabled": true,
+      "key": "i",
+      "ctrl": true,
+      "shift": false,
+      "alt": false
+    },
+    "inlineCode": {
+      "enabled": true,
+      "key": "k",
+      "ctrl": true,
+      "shift": false,
+      "alt": false
+    },
+    "codeBlock": {
+      "enabled": true,
+      "key": "k",
+      "ctrl": true,
+      "shift": true,
+      "alt": false
+    },
+    "orderedList": {
+      "enabled": true,
+      "key": "[",
+      "ctrl": true,
+      "shift": true,
+      "alt": false
+    },
+    "unorderedList": {
+      "enabled": true,
+      "key": "]",
+      "ctrl": true,
+      "shift": true,
+      "alt": false
+    }
+  }
 }

@@ -10,6 +10,7 @@ let mainWindow = null;
 let isPinned = false;
 let tray = null;
 let isQuitting = false;
+let settingsWindow = null;
 
 // 存储目录：开发时用项目 data/（Trae 沙箱友好），打包后用 userData
 const STORAGE_DIR = app.isPackaged
@@ -174,6 +175,7 @@ const DEFAULT_SETTINGS = {
   theme: 'blue',          // 主题 key
   bgImage: null,          // dataURL 或 null（背景图由渲染层 FileReader 读成 base64 直接存）
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
+  fontSize: 13,           // 页面基础字体大小（px），设置页滑杆控制
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
@@ -220,6 +222,10 @@ async function saveSettings(_, patch) {
     const current = await loadSettings();
     const merged = mergeSettings(current, patch);
     await atomicWrite(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
+    // 通知主窗口重新加载设置（主题/字号/快捷键即时生效）
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('settings-changed');
+    }
     return { ok: true, settings: merged };
   } catch (err) {
     console.error('保存设置失败：', err);
@@ -280,6 +286,54 @@ function applyPinState() {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.setAlwaysOnTop(isPinned, 'screen-saver');
   mainWindow.webContents.send('pin-toggled', isPinned);
+}
+
+/**
+ * 独立的设置窗口（可拖动、可缩放，与主窗口分离）。
+ * 单例：已打开则聚焦复用。
+ */
+function openSettingsWindow() {
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.show();
+    settingsWindow.focus();
+    return;
+  }
+  settingsWindow = new BrowserWindow({
+    width: 440,
+    height: 620,
+    minWidth: 380,
+    minHeight: 460,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#00000000',
+    show: false,
+    title: 'EzTxt 设置',
+    icon: ICON_PATH_PNG,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false
+    }
+  });
+  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  settingsWindow.once('ready-to-show', () => {
+    settingsWindow.show();
+  });
+  settingsWindow.on('closed', () => {
+    settingsWindow = null;
+  });
+  settingsWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
 }
 
 function togglePin() {
@@ -542,6 +596,9 @@ function registerIpc() {
   ipcMain.handle('save-note', saveNote);
   ipcMain.handle('load-settings', loadSettings);
   ipcMain.handle('save-settings', saveSettings);
+
+  // 打开独立的设置窗口
+  ipcMain.on('open-settings', () => openSettingsWindow());
 
   ipcMain.on('window-minimize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
