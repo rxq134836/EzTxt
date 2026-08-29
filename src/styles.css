@@ -756,6 +756,20 @@ body.is-batch-mode .task-card * {
   font-size: var(--font-size);
   padding: 6px 14px;
 }
+/* 「删除」按钮：实心危险色，默认就与「取消」区分（不依赖 hover） */
+.confirm-actions .tb-btn.danger {
+  background: var(--danger);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+.confirm-actions .tb-btn.danger:hover {
+  background: #c9302c;
+  color: #fff;
+}
+.confirm-actions .tb-btn.danger:active {
+  transform: scale(0.97);
+}
 
 /* ========= Help panel ========= */
 .help-panel {
