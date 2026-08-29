@@ -551,7 +551,17 @@ function registerIpc() {
   ipcMain.on('move-window', (_e, dx, dy) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     const b = mainWindow.getBounds();
-    mainWindow.setBounds({ x: b.x + (dx || 0), y: b.y + (dy || 0) });
+    let nx = b.x + (dx || 0);
+    let ny = b.y + (dy || 0);
+    if (isSnapped) {
+      // mini 球拖动时夹在 workArea 内，四周留 EDGE_MARGIN(10px) 安全边距，防止拖出屏幕
+      const wa = getNearestWorkArea();
+      if (wa) {
+        nx = Math.max(wa.x + EDGE_MARGIN, Math.min(nx, wa.x + wa.width - MINI_SIZE - EDGE_MARGIN));
+        ny = Math.max(wa.y + EDGE_MARGIN, Math.min(ny, wa.y + wa.height - MINI_SIZE - EDGE_MARGIN));
+      }
+    }
+    mainWindow.setBounds({ x: Math.round(nx), y: Math.round(ny) });
   });
 }
 

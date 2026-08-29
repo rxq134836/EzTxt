@@ -1,3 +1,8 @@
+/* ============================================================
+   修改本文件（样式/主题/动画）前，必须阅读 docs/UI-DESIGN-SPEC.md 设计规范
+   来源：emilkowalski/skills —— 缓动/时长/物理感/性能/无障碍等硬性条款
+   ============================================================ */
+
 /* =========== Emil 风格：6 套配色变量 =========== */
 /* 默认（amber 琥珀）作为 :root fallback，其他主题用 [data-theme] 覆盖 */
 
@@ -445,11 +450,12 @@ html, body {
 .card-note {
   max-height: 0;
   overflow: hidden;
-  transition: max-height 220ms var(--ease-out);
-  padding: 16px 4px 6px 26px;  /* padding-top 始终 16px，避免展开/收起时间距跳变 */
+  transition: max-height 220ms var(--ease-out), padding 220ms var(--ease-out);
+  padding: 0 4px 0 26px;  /* 收起时上下内边距归零，彻底隐藏输入框（避免 border-box 下 padding 撑高漏出） */
 }
 .task-card.is-expanded .card-note {
   max-height: 340px;
+  padding: 16px 4px 6px 26px;  /* 展开时恢复上/下内边距 */
 }
 
 .card-editor {
@@ -695,10 +701,13 @@ body.is-mini .app {
   user-select: none;
   border: none;
   padding: 0;
-  transition: transform 150ms var(--ease-out);
+  transition: transform 150ms var(--ease-out), filter 150ms ease;
+  /* 常态微缩 6%：mini 窗口与球体同尺寸(56px)，hover 放大到 100% 恰好充满窗口，
+     既保留放大反馈，又不会被窗口边缘裁剪 */
+  transform: scale(0.94);
 }
-.mini-bar:hover { transform: scale(1.06); }
-.mini-bar:active { transform: scale(0.94); }
+.mini-bar:hover { transform: scale(1); filter: brightness(1.08); }
+.mini-bar:active { transform: scale(0.9); filter: brightness(0.95); }
 .mini-dot {
   width: 6px;
   height: 6px;
