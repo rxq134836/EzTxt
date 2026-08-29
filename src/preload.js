@@ -117,6 +117,18 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('settings-changed', listener);
   },
 
+  // 数据保存位置
+  getStorageInfo: () => ipcRenderer.invoke('storage-get-info'),
+  chooseStorageDir: () => ipcRenderer.invoke('storage-choose-dir'),
+  setStorageDir: (dir) => ipcRenderer.invoke('storage-set-dir', dir),
+  openStorageDir: () => ipcRenderer.invoke('storage-open-dir'),
+  // 数据存储位置变更时（主窗口重载笔记/设置）
+  onStorageChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('storage-changed', listener);
+    return () => ipcRenderer.removeListener('storage-changed', listener);
+  },
+
   // Markdown 渲染（在 preload 中执行，避免渲染进程直接持有 marked）
   renderMarkdown: (text) => marked.parse(text == null ? '' : String(text)),
 

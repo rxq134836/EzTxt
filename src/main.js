@@ -1,9 +1,9 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, screen, Tray, Menu, nativeImage, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs/promises');
-const { existsSync } = require('fs');
+const { existsSync, readFileSync } = require('fs');
 const crypto = require('crypto');
 
 let mainWindow = null;
@@ -12,12 +12,13 @@ let tray = null;
 let isQuitting = false;
 let settingsWindow = null;
 
-// 存储目录：开发时用项目 data/（Trae 沙箱友好），打包后用 userData
-const STORAGE_DIR = app.isPackaged
-  ? path.join(app.getPath('userData'), 'storage')
-  : path.join(__dirname, '..', 'data');
-const NOTE_FILE = path.join(STORAGE_DIR, 'note.json');
-const SETTINGS_FILE = path.join(STORAGE_DIR, 'settings.json');
+// 存储目录：动态（可由设置页修改）；开发时默认项目 data/，打包后默认 userData/storage
+let STORAGE_DIR = null;
+function defaultStorageDir() { return app.isPackaged ? path.join(app.getPath('userData'), 'storage') : path.join(__dirname, '..', 'data'); }
+function storageConfigPath() { return path.join(app.getPath('userData'), 'storage-location.json'); }
+function initStorageDir() { const def = defaultStorageDir(); try { const raw = readFileSync(storageConfigPath(), 'utf8').replace(/^\uFEFF/, ''); const cfg = JSON.parse(raw); if (cfg && typeof cfg.dir === 'string' && cfg.dir) { STORAGE_DIR = cfg.dir; return; } } catch (_) {} STORAGE_DIR = def; }
+function noteFile() { return path.join(STORAGE_DIR, 'note.json'); }
+function settingsFile() { return path.join(STORAGE_DIR, 'settings.json'); }
 
 // 图标资源(多尺寸 ico 供打包,256px png 供运行时 nativeImage)
 const ICON_PATH_ICO = path.join(__dirname, 'icon.ico');
@@ -90,9 +91,9 @@ async function ensureStorageFile() {
   if (!existsSync(STORAGE_DIR)) {
     await fs.mkdir(STORAGE_DIR, { recursive: true });
   }
-  if (!existsSync(NOTE_FILE)) {
+  if (!existsSync(noteFile())) {
     const initial = { ...makeDefaultDoc(), updatedAt: new Date().toISOString() };
-    await fs.writeFile(NOTE_FILE, JSON.stringify(initial, null, 2), 'utf8');
+    await fs.writeFile(noteFile(), JSON.stringify(initial, null, 2), 'utf8');
     return initial;
   }
   return null;
@@ -102,7 +103,7 @@ async function loadNote() {
   try {
     await ensureStorageFile();
     // 注意：去掉 UTF-8 BOM（PowerShell 的 Set-Content -Encoding UTF8 会写入 BOM）
-    const raw = (await fs.readFile(NOTE_FILE, 'utf8')).replace(/^\uFEFF/, '');
+    const raw = (await fs.readFile(noteFile(), 'utf8')).replace(/^\uFEFF/, '');
     const data = JSON.parse(raw);
     return migrateIfNeeded(data);
   } catch (err) {
@@ -134,7 +135,7 @@ function saveNote(_, doc) {
       }));
 
       const payload = { items: normalized, updatedAt: now };
-      await atomicWrite(NOTE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+      await atomicWrite(noteFile(), JSON.stringify(payload, null, 2), 'utf8');
       return { ok: true, updatedAt: now, count: normalized.length };
     } catch (err) {
       console.error('保存笔记失败：', err);
@@ -222,11 +223,11 @@ function mergeSettings(base, data) {
 async function loadSettings() {
   try {
     await ensureStorageDir();
-    if (!existsSync(SETTINGS_FILE)) {
-      await fs.writeFile(SETTINGS_FILE, JSON.stringify(DEFAULT_SETTINGS, null, 2), 'utf8');
+    if (!existsSync(settingsFile())) {
+      await fs.writeFile(settingsFile(), JSON.stringify(DEFAULT_SETTINGS, null, 2), 'utf8');
       return { ...DEFAULT_SETTINGS };
     }
-    const raw = (await fs.readFile(SETTINGS_FILE, 'utf8')).replace(/^\uFEFF/, '');
+    const raw = (await fs.readFile(settingsFile(), 'utf8')).replace(/^\uFEFF/, '');
     const data = JSON.parse(raw);
     return mergeSettings(DEFAULT_SETTINGS, data);
   } catch (err) {
@@ -241,7 +242,7 @@ function saveSettings(_, patch) {
       await ensureStorageDir();
       const current = await loadSettings();
       const merged = mergeSettings(current, patch);
-      await atomicWrite(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
+      await atomicWrite(settingsFile(), JSON.stringify(merged, null, 2), 'utf8');
       // 通知主窗口重新加载设置（主题/字号/快捷键即时生效）
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('settings-changed');
@@ -648,6 +649,60 @@ function registerIpc() {
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());
 
+  // ===== 数据保存位置 =====
+  ipcMain.handle('storage-get-info', () => ({
+    dir: STORAGE_DIR,
+    defaultDir: defaultStorageDir(),
+    noteFile: noteFile(),
+    settingsFile: settingsFile(),
+    isDefault: STORAGE_DIR === defaultStorageDir()
+  }));
+  ipcMain.handle('storage-choose-dir', async () => {
+    const result = await dialog.showOpenDialog(settingsWindow, {
+      title: '选择数据保存目录',
+      properties: ['openDirectory', 'createDirectory']
+    });
+    if (result.canceled || !result.filePaths || !result.filePaths[0]) return { canceled: true };
+    return { canceled: false, dir: result.filePaths[0] };
+  });
+  // 在资源管理器中打开当前存储位置
+  ipcMain.handle('storage-open-dir', async () => {
+    try {
+      await fs.mkdir(STORAGE_DIR, { recursive: true });
+      const err = await shell.openPath(STORAGE_DIR);
+      return { ok: !err, error: err || null };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+  ipcMain.handle('storage-set-dir', async (_e, dir) => {
+    try {
+      if (!dir || typeof dir !== 'string') return { ok: false, error: '无效路径' };
+      const target = path.resolve(dir);
+      await fs.mkdir(target, { recursive: true });
+      // 新目录无数据时，从旧目录复制现有数据（避免更换位置导致数据丢失）
+      const srcNote = path.join(STORAGE_DIR, 'note.json');
+      const dstNote = path.join(target, 'note.json');
+      if (existsSync(srcNote) && !existsSync(dstNote)) {
+        await fs.copyFile(srcNote, dstNote);
+      }
+      const srcSettings = path.join(STORAGE_DIR, 'settings.json');
+      const dstSettings = path.join(target, 'settings.json');
+      if (existsSync(srcSettings) && !existsSync(dstSettings)) {
+        await fs.copyFile(srcSettings, dstSettings);
+      }
+      STORAGE_DIR = target;
+      await fs.writeFile(storageConfigPath(), JSON.stringify({ dir: target }, null, 2), 'utf8');
+      // 通知主窗口重新加载新位置的数据
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('storage-changed');
+      }
+      return { ok: true, dir: target };
+    } catch (err) {
+      return { ok: false, error: String(err) };
+    }
+  });
+
   ipcMain.on('window-minimize', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize();
   });
@@ -693,6 +748,7 @@ function registerIpc() {
 }
 
 app.whenReady().then(() => {
+  initStorageDir();
   registerIpc();
   createWindow();
   createTray();

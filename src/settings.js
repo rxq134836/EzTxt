@@ -85,6 +85,12 @@
   const confirmText = $('#confirmText');
   const btnConfirmOk = $('#btnConfirmOk');
   const btnConfirmCancel = $('#btnConfirmCancel');
+  const btnChangeStorage = $('#btnChangeStorage');
+  const btnOpenStorage = $('#btnOpenStorage');
+  const storageDirEl = $('#storageDir');
+  const storageNoteFileEl = $('#storageNoteFile');
+  const storageSettingsFileEl = $('#storageSettingsFile');
+  const storageHintEl = $('#storageHint');
 
   let bgManageMode = false;      // 历史列表管理模式（批量选择删除）
   let bgSelected = new Set();    // 选中的背景图 dataURL
@@ -403,6 +409,44 @@
     }
   }
 
+  // ===== 数据保存位置 =====
+  async function refreshStorageInfo() {
+    try {
+      const info = await api.getStorageInfo();
+      storageDirEl.textContent = info.dir || '—';
+      storageNoteFileEl.textContent = info.noteFile || '—';
+      storageSettingsFileEl.textContent = info.settingsFile || '—';
+      storageHintEl.textContent = info.isDefault
+        ? '当前使用默认存储位置。'
+        : '当前使用自定义存储位置。';
+    } catch (_) {
+      storageHintEl.textContent = '读取存储信息失败。';
+    }
+  }
+
+  async function onChangeStorage() {
+    try {
+      const chosen = await api.chooseStorageDir();
+      if (chosen.canceled || !chosen.dir) return;
+      const res = await api.setStorageDir(chosen.dir);
+      if (res && res.ok) {
+        storageHintEl.textContent = '存储位置已更新。';
+        await refreshStorageInfo();
+      } else {
+        storageHintEl.textContent = '修改失败：' + (res && res.error ? res.error : '未知错误');
+      }
+    } catch (err) {
+      storageHintEl.textContent = '修改失败：' + (err && err.message ? err.message : String(err));
+    }
+  }
+
+  async function onOpenStorage() {
+    try {
+      const res = await api.openStorageDir();
+      if (res && !res.ok) storageHintEl.textContent = '打开失败：' + (res.error || '');
+    } catch (_) {}
+  }
+
   // ===== 事件 =====
   winClose.addEventListener('click', () => window.close());
   fontSizeSliderEl.addEventListener('input', onFontSizeChange);
@@ -410,6 +454,8 @@
   btnRemoveBg.addEventListener('click', handleBgRemove);
   bgFileInput.addEventListener('change', onBgFileSelected);
   bgOpacitySlider.addEventListener('input', onBgOpacityChange);
+  btnChangeStorage.addEventListener('click', onChangeStorage);
+  btnOpenStorage.addEventListener('click', onOpenStorage);
 
   // 背景历史批量管理
   btnManageBg.addEventListener('click', toggleBgManageMode);
@@ -432,4 +478,5 @@
   });
 
   loadSettingsState();
+  refreshStorageInfo();
 })();

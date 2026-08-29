@@ -1347,6 +1347,15 @@
       api.onSettingsChanged(() => loadSettingsState());
     }
 
+    // 数据存储位置变更后 → 主窗口重新加载笔记与设置
+    if (api.onStorageChanged) {
+      api.onStorageChanged(() => {
+        loadSettingsState().finally(() => {
+          loadInitial();
+        });
+      });
+    }
+
     window.addEventListener('beforeunload', () => {
       if (isDirty) {
         try {

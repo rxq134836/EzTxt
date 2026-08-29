@@ -931,6 +931,50 @@ body.is-batch-mode .task-card * {
   letter-spacing: 0.5px;
 }
 
+/* 数据保存 */
+.storage-path {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: "SFMono-Regular", "Consolas", "Cascadia Code", monospace;
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--ink);
+  word-break: break-all;
+  user-select: text;
+}
+.storage-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.storage-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.storage-file-label {
+  flex: 0 0 auto;
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--ink-soft);
+}
+.storage-file-row code {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: "SFMono-Regular", "Consolas", "Cascadia Code", monospace;
+  font-size: calc(var(--font-size) - 1.5px);
+  color: var(--ink-soft);
+  word-break: break-all;
+  user-select: text;
+}
+.storage-hint {
+  margin: 4px 0 0;
+  font-size: calc(var(--font-size) - 2px);
+  color: var(--ink-mute);
+}
+
 /* —— 设置项（外观：主题 / 字体 / 背景） —— */
 .settings-block {
   padding: 10px 0;
