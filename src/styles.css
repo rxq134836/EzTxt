@@ -565,9 +565,9 @@ body[data-material="acrylic"] .app {
   padding: 0 4px 0 26px;  /* 收起时上下内边距归零，彻底隐藏输入框（避免 border-box 下 padding 撑高漏出） */
 }
 .task-card.is-expanded .card-note {
-  max-height: 340px;
+  max-height: none;          /* 展开不限高：备注/代码块多长显示多长，随内容撑开卡片 */
   padding: 16px 4px 6px 26px;  /* 展开时恢复上/下内边距 */
-  overflow-y: auto;            /* 内容超出时在卡内滚动，避免被裁断 */
+  overflow: visible;         /* 不裁切、不滚动，卡片整体随内容变高 */
 }
 
 /* 所见即所得编辑器（contenteditable）：显示 Markdown 编译后的排版 */
@@ -584,8 +584,7 @@ body[data-material="acrylic"] .app {
   font-size: var(--font-size);
   line-height: 1.6;
   min-height: 80px;
-  max-height: 420px;
-  overflow-y: auto;
+  overflow-y: auto; /* 无最大高度限制：内容多长就展开多长（配合卡片展开态不限高） */
   outline: none;
   transition: border-color 0.12s;
   user-select: text;
