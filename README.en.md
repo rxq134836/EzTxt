@@ -1,36 +1,236 @@
-# EasyTxt
+# EzTxt Sticky Notes
 
-#### Description
-{**When you're done, you can delete the content in this README and update the file with details for others getting started with your repository**}
+<div align="center">
 
-#### Software Architecture
-Software architecture description
+**Desktop To-Do · Markdown Notes · Floating Ball**
 
-#### Installation
+An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Markdown notes, a draggable edge-snapping floating ball, theme / material / background customization, and a separate settings window.
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+![Electron](https://img.shields.io/badge/Electron-31.x-47848F?logo=electron&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES2020-F7DF1E?logo=javascript&logoColor=black)
+![Windows](https://img.shields.io/badge/Windows-10%2F11-0078D6?logo=windows&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-#### Instructions
+</div>
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+![](./img/img1.png)
 
-#### Contribution
+![](./img/img2.png)
 
-1.  Fork the repository
-2.  Create Feat_xxx branch
-3.  Commit your code
-4.  Create Pull Request
+---
 
+## 📌 Table of Contents
 
-#### Gitee Feature
+- [✨ Features](#-features)
+- [🖥️ Tech Stack](#️-tech-stack)
+- [🚀 Quick Start](#-quick-start)
+- [🎮 Usage](#-usage)
+- [⌨️ Keyboard Shortcuts](#️-keyboard-shortcuts)
+- [📦 Project Structure](#-project-structure)
+- [⚙️ Data & Configuration](#️-data--configuration)
+- [🔨 Build & Release](#-build--release)
+- [📄 License](#-license)
 
-1.  You can use Readme\_XXX.md to support different languages, such as Readme\_en.md, Readme\_zh.md
-2.  Gitee blog [blog.gitee.com](https://blog.gitee.com)
-3.  Explore open source project [https://gitee.com/explore](https://gitee.com/explore)
-4.  The most valuable open source project [GVP](https://gitee.com/gvp)
-5.  The manual of Gitee [https://gitee.com/help](https://gitee.com/help)
-6.  The most popular members  [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
+---
+
+## ✨ Features
+
+### To-Do List
+- **Card-based to-do list**: create / edit / check off / delete, with batch selection and a two-step delete confirmation
+- **Divider grouping**: insert dividers with optional titles to organize tasks into sections
+- **Real-time search & filter**: filter tasks by keyword from the top search bar
+- **Auto-save**: global debounced auto-save (2s), `Ctrl+S` saves immediately, best-effort save on close
+
+### WYSIWYG Markdown Notes
+- Every card has an expandable **Notes** area for WYSIWYG Markdown editing (`marked` render + `turndown` serialize, lossless round-trip)
+- **Code block syntax highlighting** (highlight.js): JavaScript / TypeScript / Bash / SQL / C# (.NET) / Java / Python / Vue and more
+- Language badge auto-shown at the bottom-right of each code block
+- Typora-style code block input: type ` ```language ` + Enter to create a block; Enter adds a newline inside, Enter on an empty line exits
+- Pasting images embeds them as base64; pasting multi-line code keeps a single code block
+
+### Floating Ball (Mini Ball)
+- One-click collapse into a **desktop floating ball** from the toolbar, or drag the window to a screen edge to snap
+- Shows the pending count; click to expand, drag to move
+- **macOS Genie-style scale animation**: content shrinks toward the top-right on collapse, expands from the edge nearest the ball on release
+- The ball always uses the classic solid theme color, independent of the window material
+
+### Personalization
+- **9 theme colors**: Amber / Deep Blue / Olive / Terracotta / Gold / Rose / Sage / Pure Black / Pure White
+- **Window materials**: Classic (opaque) / Translucent; Acrylic (frosted glass) reserved
+- **Background image**: custom background with adjustable opacity, keeping the last 10 uploads
+- **Font size**: page base font-size slider
+- **Window ratio**: Default / Wide Landscape / Landscape / Narrow Portrait / Tall Portrait + **Custom size** (enter width & height in a dialog, live-synced with the main window)
+
+### System Integration
+- **System tray**: closes to tray by default; tray menu shows / quits; the close-button behavior can be switched in settings (minimize to tray / quit app)
+- **Always on top**: `Ctrl+Shift+T`
+- **Separate settings window**: appearance / shortcuts / close behavior / data location all managed here
+- **Customizable data location**: default local `data/` (dev) or `userData/storage` (packaged), switchable with data migration
+- **Editor shortcuts**: bold / italic / inline code / code block / ordered / unordered list, toggleable and rebindable
+- **Clean uninstall**: terminates the running process and cleans caches on uninstall, keeping only to-do data
+
+---
+
+## 🖥️ Tech Stack
+
+| Layer | Tech |
+| --- | --- |
+| Desktop framework | [Electron](https://www.electronjs.org/) 31.x (contextIsolation + preload bridge) |
+| Markdown render | [marked](https://github.com/markedjs/marked) 13.x |
+| HTML → Markdown | [turndown](https://github.com/mixmark-io/turndown) 7.x |
+| Code highlighting | [highlight.js](https://highlightjs.org/) 11.x |
+| Packaging | [electron-builder](https://www.electron.build/) 24.x (NSIS / Portable) |
+| Styling | Vanilla CSS (design spec in `docs/UI-DESIGN-SPEC.md`) |
+
+> Note: the renderer uses `contextIsolation` with `sandbox: false`; all Node capabilities (marked / turndown / highlight.js / IPC) are wrapped in preload and exposed via `window.api` — the renderer never touches Node modules directly.
+
+---
+
+## 🚀 Quick Start
+
+### Requirements
+
+- [Node.js](https://nodejs.org/) ≥ 18
+- [npm](https://www.npmjs.com/) (or pnpm / yarn)
+- Windows 10 / 11 (packaging targets Windows x64)
+
+### Install & Run
+
+```bash
+# 1. Clone the repository
+git clone <your-repo-url>
+cd easy-txt
+
+# 2. Install dependencies
+npm install
+
+# 3. Run in development (with logging)
+npm start
+# or
+npm run dev
+```
+
+> In mainland China, see the mirror config in `.npmrc` (electron / electron-builder binaries via npmmirror).
+
+### Development
+
+```bash
+npm run dev          # electron . --enable-logging
+npm run gen:icon     # regenerate app icons (src/icon.ico / icon.png)
+```
+
+---
+
+## 🎮 Usage
+
+### Basics
+1. **New task**: click the "New" button in the toolbar or press `Ctrl+N`, type a title and press Enter
+2. **Check / delete**: click the checkbox on the left to complete; "Delete" enters batch mode, then confirm to remove selected cards
+3. **Notes**: click the expand arrow on the right of a card and type Markdown in the editor — WYSIWYG
+4. **Dividers**: click "Split" in the toolbar to insert a group divider with an optional title
+5. **Collapse to ball**: click "Shrink" in the toolbar to collapse the window into a floating ball (dragging to a screen edge also snaps)
+6. **Settings**: click "Settings" in the toolbar to open the separate settings window
+
+### Data Storage
+- Default data dir: `data/` in the project (dev), `%APPDATA%\EzTxt\storage` (packaged)
+- Data files: `note.json` (to-dos), `settings.json` (settings)
+- In **Settings → Data Storage** you can view the current location, open the folder, and change the storage dir (auto-migrates data)
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+S` | Save now |
+| `Ctrl+N` | New task |
+| `Ctrl+Shift+T` | Toggle always-on-top |
+| `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / Italic / Inline code |
+| `Ctrl+Shift+[` / `Ctrl+Shift+]` | Ordered / Unordered list |
+| `Ctrl+Shift+K` | Code block |
+| `` ```language `` + `Enter` | Create a code block (e.g. ` ```js `, ` ```python `) |
+| `Enter` | Continue list items; newline inside code blocks; exit an empty code-block line |
+| `Shift+Enter` | Soft line break |
+| `Tab` / `Shift+Tab` | Indent / outdent |
+| `Backspace` | Delete the selected task (when not typing) |
+| `Ctrl+/` | Toggle the shortcut help panel |
+
+> Editor shortcuts can be toggled and rebound individually in **Settings → Shortcuts** (must include Ctrl/Alt modifiers).
+
+---
+
+## 📦 Project Structure
+
+```
+easy-txt/
+├── src/                     # App source
+│   ├── main.js              # Electron main process: windows/tray/snap/storage/IPC
+│   ├── preload.js           # preload: marked/turndown/highlight.js wrappers + contextBridge
+│   ├── renderer.js          # Main-window renderer: to-do list + WYSIWYG editor
+│   ├── index.html           # Main window page
+│   ├── settings.html        # Separate settings window page
+│   ├── settings.js          # Settings window logic
+│   ├── styles.css           # Global styles (themes/materials/editor/scrollbars etc.)
+│   ├── icon.ico / icon.png  # App icons
+│   └── logo-0829-1.*        # Original logo assets (not packaged)
+├── scripts/
+│   ├── gen-icon.js          # Icon generation script
+│   ├── after-pack.js        # Post-pack hook (inject icon via rcedit)
+│   ├── uninstaller.nsh      # Custom NSIS uninstaller (clean caches, keep data)
+│   └── rcedit-x64.exe       # Icon injection tool
+├── docs/
+│   └── UI-DESIGN-SPEC.md    # UI design spec
+├── data/                    # Dev-mode data dir (auto-generated)
+├── dist/                    # Build output dir (auto-generated)
+├── .npmrc                   # npm mirror config
+└── package.json
+```
+
+---
+
+## ⚙️ Data & Configuration
+
+Settings (`settings.json`):
+
+| Key | Description |
+| --- | --- |
+| `theme` | Theme color key |
+| `material` | Window material: `opaque` (classic) / `translucent` / `acrylic` (reserved) |
+| `acrylicBlur` | Acrylic frosted intensity (reserved) |
+| `bgImage` / `bgHistory` | Current background / last 10 background history (dataURL) |
+| `bgOpacity` | Background opacity |
+| `fontSize` | Page base font size (px) |
+| `closeAction` | Close-button behavior: `tray` (minimize to tray) / `quit` (exit app) |
+| `windowSize` / `customWindowSize` | Window-ratio preset / custom size |
+| `shortcuts` | Editor shortcuts (enabled flags & key bindings) |
+
+---
+
+## 🔨 Build & Release
+
+```bash
+npm run dist           # Build NSIS installer + Portable (win x64)
+npm run dist:portable  # Portable only
+npm run dist:nsis      # NSIS installer only
+```
+
+Outputs to `dist/`:
+
+- `EzTxt-<version>-x64.exe` (NSIS installer)
+- `EzTxt-<version>-x64-portable.exe` (portable)
+
+> On uninstall, the installer runs a custom NSIS script to terminate the running process and clean cache dirs (Cache / logs etc.), **keeping your to-do data** (the `storage` folder).
+
+---
+
+## 📄 License
+
+This project is open-sourced under the [MIT License](./LICENSE).
+
+---
+
+<div align="center">
+
+**Made with ❤️ by EzTxt**
+
+</div>
