@@ -2,6 +2,12 @@
 
 <div align="center">
 
+**Language: [简体中文](README.md) | English**
+
+</div>
+
+<div align="center">
+
 **Desktop To-Do · Markdown Notes · Floating Ball**
 
 An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Markdown notes, a draggable edge-snapping floating ball, theme / material / background customization, and a separate settings window.

@@ -2,6 +2,12 @@
 
 <div align="center">
 
+**Language: 简体中文 | [English](README.en.md)**
+
+</div>
+
+<div align="center">
+
 **桌面待办 · Markdown 便签 · 悬浮小球**
 
 一个基于 Electron 的本地待办事项与 Markdown 笔记应用：待办卡片 + 所见即所得 Markdown 备注、拖拽贴边的悬浮小球、主题 / 材质 / 背景图个性化、独立设置窗口。
