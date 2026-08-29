@@ -13,9 +13,9 @@
 
 </div>
 
-![](D:\projects\Codex\easy-txt\img\img1.png)
+![](./img/img1.png)
 
-![](D:\projects\Codex\easy-txt\img\img2.png)
+![](./img/img2.png)
 
 ---
 
