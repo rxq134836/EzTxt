@@ -39,7 +39,8 @@
           <div class="material-options" id="materialOptions">
             <button class="material-btn" type="button" data-material="opaque">经典</button>
             <button class="material-btn" type="button" data-material="translucent">半透明</button>
-            <button class="material-btn" type="button" data-material="acrylic">亚克力</button>
+            <!-- 亚克力暂时隐藏（保留 DOM 便于以后恢复） -->
+            <button class="material-btn hidden" type="button" data-material="acrylic">亚克力</button>
           </div>
         </div>
 
@@ -81,7 +82,7 @@
               <span>上传图片</span>
             </button>
             <button class="tb-btn" id="btnRemoveBg" type="button">
-              <span>移除背景</span>
+              <span>移除背景图片</span>
             </button>
           </div>
           <input type="file" id="bgFileInput" accept="image/*" class="hidden" />

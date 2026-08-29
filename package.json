@@ -63,7 +63,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "EzTxt 便签"
+      "shortcutName": "EzTxt 便签",
+      "include": "scripts/uninstaller.nsh"
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"

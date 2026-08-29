@@ -98,6 +98,19 @@
       <span class="save-time" id="saveTime">尚未保存</span>
     </footer>
 
+    <!-- 关闭确认弹窗：选择「关闭软件」或「缩小到托盘」 -->
+    <div class="confirm-mask hidden" id="closeConfirmMask">
+      <div class="confirm-card">
+        <h3>关闭 EzTxt</h3>
+        <p class="confirm-text">选择关闭方式：</p>
+        <div class="confirm-actions column">
+          <button class="tb-btn" id="btnCloseToTray" type="button">缩小到托盘</button>
+          <button class="tb-btn danger" id="btnCloseApp" type="button">关闭软件</button>
+        </div>
+        <p class="confirm-hint" style="margin-top:10px;font-size:calc(var(--font-size) - 2px);color:var(--ink-mute);">缩小到托盘后程序仍在后台运行，可从托盘图标恢复。</p>
+      </div>
+    </div>
+
     <!-- 批量删除确认弹窗 -->
     <div class="confirm-mask hidden" id="confirmMask">
       <div class="confirm-card">

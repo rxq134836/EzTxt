@@ -29,6 +29,9 @@
   const minBtn = $('#minBtn');
   const shrinkBtn = $('#shrinkBtn');
   const closeBtn = $('#closeBtn');
+  const closeConfirmMask = $('#closeConfirmMask');
+  const btnCloseToTray = $('#btnCloseToTray');
+  const btnCloseApp = $('#btnCloseApp');
   const searchbarEl = $('#searchbar');
   const searchInputEl = $('#searchInput');
   const searchClearBtn = $('#searchClear');
@@ -1173,11 +1176,12 @@
     if (persist) api.saveSettings({ theme: key });
   }
 
-  /** 应用窗口材质：opaque（经典不透明）/ translucent（半透明）/ acrylic（亚克力磨砂）。
-   *  经典=实心主题色；半透明=高不透明度+轻模糊；亚克力=低不透明度+强模糊（CSS 磨砂观感），
-   *  并尽力调用系统级亚克力（Windows 11 22H2+）。 */
+  /** 应用窗口材质：opaque（经典不透明）/ translucent（半透明）。
+   *  亚克力（acrylic）暂时隐藏：旧配置残留时回退为半透明。
+   *  经典=实心主题色；半透明=高不透明度+轻模糊。 */
   function applyMaterial(material) {
-    const val = ['opaque', 'translucent', 'acrylic'].includes(material) ? material : 'opaque';
+    let val = ['opaque', 'translucent'].includes(material) ? material : 'opaque';
+    if (material === 'acrylic') val = 'translucent'; // 隐藏材质回退
     settings.material = val;
     document.body.dataset.material = val;
     if (api.setWindowMaterial) api.setWindowMaterial(val);
@@ -1299,7 +1303,22 @@
   function initWindowControls() {
     minBtn.addEventListener('click', () => api.minimize());
     shrinkBtn.addEventListener('click', () => api.enterMini());
-    closeBtn.addEventListener('click', () => api.close());
+    // 关闭按钮：弹出选择（关闭软件 / 缩小到托盘），不再直接关闭
+    closeBtn.addEventListener('click', () => {
+      closeConfirmMask.classList.remove('hidden');
+      btnCloseToTray.focus();
+    });
+    btnCloseToTray.addEventListener('click', () => {
+      closeConfirmMask.classList.add('hidden');
+      api.close(); // 缩到托盘
+    });
+    btnCloseApp.addEventListener('click', () => {
+      closeConfirmMask.classList.add('hidden');
+      api.quit(); // 真正退出
+    });
+    closeConfirmMask.addEventListener('click', (e) => {
+      if (e.target === closeConfirmMask) closeConfirmMask.classList.add('hidden');
+    });
     pinBtn.addEventListener('click', () => api.togglePin());
 
     btnAdd.addEventListener('click', () => addTask());

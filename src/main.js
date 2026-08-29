@@ -740,6 +740,12 @@ function registerIpc() {
     }
   });
 
+  // 真正退出软件（关闭按钮弹窗「关闭软件」）
+  ipcMain.on('window-quit', () => {
+    isQuitting = true;
+    app.quit();
+  });
+
   ipcMain.on('window-toggle-pin', () => {
     togglePin();
   });

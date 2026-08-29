@@ -900,6 +900,15 @@ body.is-batch-mode .task-card * {
   justify-content: flex-end;
   gap: 8px;
 }
+/* 关闭方式弹窗：按钮纵向排列，主操作在上 */
+.confirm-actions.column {
+  flex-direction: column;
+  justify-content: stretch;
+}
+.confirm-actions.column .tb-btn {
+  width: 100%;
+  padding: 8px 14px;
+}
 .confirm-actions .tb-btn {
   font-size: var(--font-size);
   padding: 6px 14px;

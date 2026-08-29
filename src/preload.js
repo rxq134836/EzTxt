@@ -214,6 +214,7 @@ contextBridge.exposeInMainWorld('api', {
   // 窗口控制
   minimize: () => ipcRenderer.send('window-minimize'),
   close: () => ipcRenderer.send('window-close'),
+  quit: () => ipcRenderer.send('window-quit'),
   togglePin: () => ipcRenderer.send('window-toggle-pin'),
   getPinState: () => ipcRenderer.invoke('window-get-pin-state'),
 

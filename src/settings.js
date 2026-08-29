@@ -66,11 +66,14 @@
   }
 
   // ===== 材质（经典 / 半透明 / 亚克力） =====
-  const MATERIALS = ['opaque', 'translucent', 'acrylic'];
+  // 亚克力暂时隐藏（UI 不可选）；旧配置若残留 acrylic，加载时回退为半透明
+  const MATERIALS = ['opaque', 'translucent'];
+  const HIDDEN_MATERIALS = ['acrylic'];
 
   /** 设置窗口自身立即套用材质样式（磨砂观感跟随主窗口） */
   function applyMaterial(material) {
-    const val = MATERIALS.includes(material) ? material : 'opaque';
+    let val = MATERIALS.includes(material) ? material : 'opaque';
+    if (HIDDEN_MATERIALS.includes(material)) val = 'translucent'; // 隐藏材质回退
     settings.material = val;
     document.body.dataset.material = val;
     renderMaterialOptions();
@@ -453,6 +456,11 @@
       }
       document.body.dataset.theme = settings.theme;
       applyFontSize(settings.fontSize);
+      // 亚克力已隐藏：旧配置残留 acrylic 时回退为半透明并持久化，避免下次仍生效
+      if (HIDDEN_MATERIALS.includes(settings.material)) {
+        settings.material = 'translucent';
+        api.saveSettings({ material: 'translucent' });
+      }
       applyMaterial(settings.material);   // 材质（含透明度/磨砂感设置显隐）
       applyAcrylicBlur(settings.acrylicBlur); // 磨砂强度（仅亚克力生效）
       bgOpacitySlider.value = String(settings.bgOpacity);
