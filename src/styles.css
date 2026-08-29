@@ -574,6 +574,7 @@ html, body {
 .card-editor pre {
   margin: 0 0 8px;
   padding: 8px 10px;
+  min-height: 80px; /* 新建代码块即拥有舒适的输入区域（背景不再只有一行高） */
   background: rgba(var(--ink-rgb), 0.06);
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -590,6 +591,7 @@ html, body {
   padding: 1px 4px;
 }
 .card-editor pre code {
+  display: block; /* 空代码块光标满高显示，不再只显示一半 */
   background: transparent;
   padding: 0;
   font-size: 0.92em;

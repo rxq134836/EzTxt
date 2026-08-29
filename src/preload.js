@@ -47,12 +47,55 @@ turndownService.addRule('listItem', {
     return prefix + content + (node.nextSibling ? '\n' : '');
   }
 });
-// 裸 <pre>（编辑器 Ctrl+Shift+K 产生的，无 <code> 子元素）→ ``` 围栏代码块
+// 代码块文本提取：文本节点原样、<br> 视为换行（编辑器可能产出 <br>）
+function codeBlockText(node) {
+  let s = '';
+  const children = node.childNodes || [];
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    if (child.nodeType === 3) s += child.data;
+    else if (child.nodeName === 'BR') s += '\n';
+    else s += codeBlockText(child);
+  }
+  return s;
+}
+
+// 覆盖默认 fencedCodeBlock 规则：用 <br> 感知的提取替代 textContent（textContent 会丢掉 <br> 换行）
+turndownService.addRule('fencedCodeBlock', {
+  filter: (node) => node.nodeName === 'PRE' && node.firstChild && node.firstChild.nodeName === 'CODE',
+  replacement: (content, node) => {
+    const codeEl = node.firstChild;
+    const className = codeEl.getAttribute('class') || '';
+    const language = (className.match(/language-(\S+)/) || [null, ''])[1];
+    const code = codeBlockText(codeEl).replace(/\n$/, '');
+    const fenceChar = '`';
+    let fenceSize = 3;
+    const fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+    let match;
+    while ((match = fenceInCodeRegex.exec(code))) {
+      if (match[0].length >= fenceSize) fenceSize = match[0].length + 1;
+    }
+    const fence = fenceChar.repeat(fenceSize);
+    return '\n\n' + fence + language + '\n' + code + '\n' + fence + '\n\n';
+  }
+});
+
+// 裸 <pre>（编辑器内的代码块均为纯 pre，语言写在 pre 的 class 上）→ ``` 围栏代码块
 turndownService.addRule('pre', {
   filter: (node) => node.nodeName === 'PRE' && !(node.firstChild && node.firstChild.nodeName === 'CODE'),
   replacement: (content, node) => {
-    const code = node.textContent.replace(/\n$/, '');
-    return '\n\n```\n' + code + '\n```\n\n';
+    const className = node.getAttribute('class') || '';
+    const language = (className.match(/language-(\S+)/) || [null, ''])[1];
+    const code = codeBlockText(node).replace(/\n$/, '');
+    const fenceChar = '`';
+    let fenceSize = 3;
+    const fenceInCodeRegex = new RegExp('^' + fenceChar + '{3,}', 'gm');
+    let match;
+    while ((match = fenceInCodeRegex.exec(code))) {
+      if (match[0].length >= fenceSize) fenceSize = match[0].length + 1;
+    }
+    const fence = fenceChar.repeat(fenceSize);
+    return '\n\n' + fence + language + '\n' + code + '\n' + fence + '\n\n';
   }
 });
 

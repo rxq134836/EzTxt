@@ -191,7 +191,20 @@
         if (li.isConnected) {
           const editor = li.querySelector('.card-editor');
           // 仅在用户尚未输入时写入，避免覆盖用户正在编辑的内容
-          if (editor && editor.innerHTML === '') editor.innerHTML = html;
+          if (editor && editor.innerHTML === '') {
+            editor.innerHTML = html;
+            // 代码块结构简化：<pre><code class="language-x">…</code></pre> → <pre class="language-x">…</pre>
+            // 行内 <code> 嵌套在 pre 里会让 Chromium 的编辑行为不稳定（回车被吞/拆块），
+            // 纯 <pre> 的换行行为是明确可靠的。
+            editor.querySelectorAll('pre').forEach((pre) => {
+              const code = pre.firstElementChild;
+              if (code && code.tagName === 'CODE') {
+                const lang = (code.className.match(/language-(\S+)/) || [])[1];
+                if (lang) pre.className = 'language-' + lang;
+                pre.textContent = code.textContent; // 保留代码内容（含换行）
+              }
+            });
+          }
         }
       })
       .catch(() => {});
@@ -658,11 +671,9 @@
     }
     if (after.trim() !== '') return false;
 
-    // 构造代码块 <pre><code class="language-xxx">
+    // 构造代码块 <pre class="language-xxx">（纯 pre，避免行内 code 嵌套导致的编辑异常）
     const pre = document.createElement('pre');
-    const code = document.createElement('code');
-    if (m[1]) code.className = 'language-' + m[1];
-    pre.appendChild(code);
+    if (m[1]) pre.className = 'language-' + m[1];
 
     if (block === editor) {
       // 文本直接位于编辑器根：替换光标所在文本节点
@@ -676,7 +687,7 @@
 
     // 光标落入代码块开头
     const r = document.createRange();
-    r.setStart(code, 0);
+    r.setStart(pre, 0);
     r.collapse(true);
     sel.removeAllRanges();
     sel.addRange(r);
@@ -699,30 +710,75 @@
   }
 
   /**
+   * 判断代码块内光标所在「行」是否为空（回车应退出代码块的依据，Typora 习惯）。
+   * 光标前到行首、光标后到行尾均为空白 → 空行。
+   */
+  function isCodeLineEmpty(pre) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    const node = range.startContainer;
+    const offset = range.startOffset;
+    // 收集 pre 内所有文本节点
+    const textNodes = [];
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    let cur;
+    while ((cur = walker.nextNode())) textNodes.push(cur);
+
+    let before = '';
+    let after = '';
+    const idx = node.nodeType === 3 ? textNodes.indexOf(node) : -1;
+    for (let i = 0; i < textNodes.length; i++) {
+      const t = textNodes[i];
+      if (idx === -1) {
+        // 光标在元素位置（pre/code 本身）：按子节点顺序切分
+        const children = pre.childNodes;
+        for (let j = 0; j < children.length; j++) {
+          const c = children[j];
+          const txt = c.nodeType === 3 ? c.data : (c.textContent || '');
+          if (j < offset) before += txt;
+          else after += txt;
+        }
+        break;
+      }
+      if (i < idx) before += t.data;
+      else if (i === idx) { before += t.data.slice(0, offset); after += t.data.slice(offset); }
+      else after += t.data;
+    }
+    // 当前行：before 最后一个 \n 之后 / after 第一个 \n 之前
+    const lb = before.lastIndexOf('\n');
+    const lineBefore = before.slice(lb + 1);
+    const nb = after.indexOf('\n');
+    const lineAfter = nb === -1 ? after : after.slice(0, nb);
+    return lineBefore.trim() === '' && lineAfter.trim() === '';
+  }
+
+  /**
+   * 退出代码块：在 pre 后新建空段落并移入光标；代码块若已空则移除。
+   * 空段落序列化为空，不会污染 Markdown。
+   */
+  function exitCodeBlock(pre, editor, id) {
+    const p = document.createElement('p');
+    p.appendChild(document.createElement('br'));
+    pre.after(p);
+    if (!pre.textContent.trim()) pre.remove();
+    const sel = window.getSelection();
+    const r = document.createRange();
+    r.setStart(p, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    syncEditorNote(editor, id);
+  }
+
+  /**
    * 代码块内回车：只插入换行，不拆分割裂代码元素。
-   * - <pre>（代码块）：插入 '\n' 文本节点（pre 保留换行，turndown 序列化不丢行）
-   * - 行内 <code>：插入 <br>（turndown 的 br→\n 规则会转回换行）
+   * 用原生 insertLineBreak（软换行命令，不触发段落拆分）—— Chromium 编辑状态一致，
+   * 一次回车一个换行。pre 内若产出 <br>，preload 的 <br>→\n 提取保证序列化不丢行。
    */
   function insertCodeNewline(block, editor, id) {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return;
-    const range = sel.getRangeAt(0);
-    range.deleteContents();
-    // <pre> 或 <pre> 内的 <code> → 插入 '\n'（pre 保留换行，turndown 序列化不丢行）；
-    // 行内 <code>（不在 pre 内）→ 插入 <br>（turndown 的 br→\n 规则转回换行）
-    const inPre = block.tagName === 'PRE' || (block.tagName === 'CODE' && block.closest('pre'));
-    if (inPre) {
-      const tn = document.createTextNode('\n');
-      range.insertNode(tn);
-      const r = document.createRange();
-      r.setStartAfter(tn);
-      r.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(r);
-    } else {
-      document.execCommand('insertLineBreak');
-    }
-    // 手动 DOM 变更不触发 input 事件，这里同步一次（execCommand 路径重复同步无害）
+    document.execCommand('insertLineBreak');
+    // 原生命令已触发 input 事件，这里再同步一次（有变化才写入，重复无害）
     syncEditorNote(editor, id);
   }
 
@@ -798,13 +854,17 @@
     if (action === 'edit-note') {
       // 所见即所得编辑器（contenteditable）：用原生富文本命令，格式即时可见
 
-      // Enter：在代码块内只插换行（避免被 Chromium 拆分成两个代码块）；
-      // 行首 ```[语言] 则新建代码块（Typora 输入习惯，如 ```node / ```js 回车）
+      // Enter：代码块内 —— 空行回车退出代码块（Typora 习惯），否则只插换行；
+      // 行首 ```[语言] 则新建代码块
       if (e.key === 'Enter') {
         const codeBlock = caretInCodeBlock(actionEl);
         if (codeBlock) {
           e.preventDefault();
-          insertCodeNewline(codeBlock, actionEl, id);
+          if (!e.shiftKey && isCodeLineEmpty(codeBlock)) {
+            exitCodeBlock(codeBlock, actionEl, id);
+          } else {
+            insertCodeNewline(codeBlock, actionEl, id);
+          }
           return;
         }
         if (!e.shiftKey && fenceToCodeBlock(actionEl, id)) {
