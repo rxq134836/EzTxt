@@ -1106,6 +1106,9 @@
 
   function enterMiniMode() {
     isMiniMode = true;
+    const userMaterial = document.body.dataset.material || 'opaque';
+    // 收起动画期间强制经典材质：避免半透明/亚克力样式在收缩过程中闪现
+    document.body.dataset.material = 'opaque';
     // 1) 收起动画：内容向右上角收缩 + 淡出（与窗口缩小动画同步）
     appEl.classList.remove('is-collapsing', 'is-collapsing-to');
     // 强制 reflow 确保 transition 从当前状态开始
@@ -1120,6 +1123,8 @@
       appEl.classList.remove('is-collapsing', 'is-collapsing-to');
       updateMiniCount();
       miniBar.classList.remove('hidden');
+      // 恢复用户材质（mini 态 .app 已隐藏，仅记录待展开时使用）
+      document.body.dataset.material = userMaterial;
     }, MINI_ANIM_MS);
   }
 
@@ -1129,6 +1134,9 @@
     document.body.classList.remove('is-mini');
     miniBar.classList.add('hidden');
     clearTimeout(enterMiniTimer);
+    const userMaterial = document.body.dataset.material || 'opaque';
+    // 展开动画期间强制经典材质：主页以实心样式放大，避免半透明闪现
+    document.body.dataset.material = 'opaque';
     // 展开原点：从贴近 mini 球的角释放（边缘方向决定）
     //   左边缘 → 左下角；右边缘 → 右下角；上边缘 → 左上角；下边缘 → 左下角
     let origin = 'left bottom';
@@ -1142,11 +1150,13 @@
     appEl.classList.add('is-expanding');
     void appEl.offsetWidth;
     appEl.classList.add('is-expanding-to');
-    // 2) 动画结束后清理过渡类
+    // 2) 动画结束后清理过渡类，恢复用户材质（CSS + 系统材质）
     clearTimeout(exitMiniTimer);
     exitMiniTimer = setTimeout(() => {
       appEl.classList.remove('is-expanding', 'is-expanding-to');
       appEl.style.removeProperty('--expand-origin');
+      document.body.dataset.material = userMaterial;
+      if (api.setWindowMaterial) api.setWindowMaterial(userMaterial);
     }, 220);
   }
 

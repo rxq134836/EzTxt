@@ -1341,7 +1341,8 @@ body.is-mini .app {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  /* 背景随主题（bg-solid，浅色/暗色随主题切换），边缘用强调色，更协调 */
+  /* 固定经典材质：mini 球永远实心主题色（bg-solid 随主题变化，但不随材质切换）。
+     不设半透明/亚克力样式，避免展开或切换材质时主页闪现半透明观感 */
   background: var(--bg-solid);
   color: var(--ink);
   display: flex;
