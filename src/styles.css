@@ -655,6 +655,66 @@ body[data-material="acrylic"] .app {
   padding: 0;
   font-size: 0.92em;
 }
+
+/* ========= 代码块语法高亮（highlight.js token 配色，随主题微调） ========= */
+.card-editor pre .hljs-keyword,
+.card-editor pre .hljs-selector-tag,
+.card-editor pre .hljs-literal,
+.card-editor pre .hljs-doctag { color: #7c4dff; font-weight: 600; }
+.card-editor pre .hljs-string,
+.card-editor pre .hljs-meta .hljs-string { color: #2e7d32; }
+.card-editor pre .hljs-number,
+.card-editor pre .hljs-symbol { color: #c2185b; }
+.card-editor pre .hljs-comment,
+.card-editor pre .hljs-quote { color: #7a6e4f; font-style: italic; }
+.card-editor pre .hljs-title,
+.card-editor pre .hljs-title.function_,
+.card-editor pre .hljs-section { color: #1565c0; }
+.card-editor pre .hljs-title.class_,
+.card-editor pre .hljs-type { color: #e65100; }
+.card-editor pre .hljs-variable,
+.card-editor pre .hljs-template-variable,
+.card-editor pre .hljs-attr { color: #5d4037; }
+.card-editor pre .hljs-built_in,
+.card-editor pre .hljs-selector-attr { color: #00695c; }
+.card-editor pre .hljs-params { color: #4a3f24; }
+.card-editor pre .hljs-tag { color: #455a64; }
+.card-editor pre .hljs-name { color: #7c4dff; }
+.card-editor pre .hljs-attribute { color: #2e7d32; }
+.card-editor pre .hljs-regexp,
+.card-editor pre .hljs-link { color: #c2185b; }
+.card-editor pre .hljs-meta { color: #8d6e63; }
+.card-editor pre .hljs-emphasis { font-style: italic; }
+.card-editor pre .hljs-strong { font-weight: 700; }
+
+/* 深色主题（night/纯黑）：高亮配色调亮，保证可读性 */
+[data-theme="night"] .card-editor pre .hljs-keyword,
+[data-theme="night"] .card-editor pre .hljs-selector-tag,
+[data-theme="night"] .card-editor pre .hljs-literal,
+[data-theme="night"] .card-editor pre .hljs-doctag { color: #b388ff; }
+[data-theme="night"] .card-editor pre .hljs-string,
+[data-theme="night"] .card-editor pre .hljs-meta .hljs-string { color: #9ccc65; }
+[data-theme="night"] .card-editor pre .hljs-number,
+[data-theme="night"] .card-editor pre .hljs-symbol { color: #f48fb1; }
+[data-theme="night"] .card-editor pre .hljs-comment,
+[data-theme="night"] .card-editor pre .hljs-quote { color: #9a9aa2; }
+[data-theme="night"] .card-editor pre .hljs-title,
+[data-theme="night"] .card-editor pre .hljs-title.function_,
+[data-theme="night"] .card-editor pre .hljs-section { color: #82b1ff; }
+[data-theme="night"] .card-editor pre .hljs-title.class_,
+[data-theme="night"] .card-editor pre .hljs-type { color: #ffab91; }
+[data-theme="night"] .card-editor pre .hljs-variable,
+[data-theme="night"] .card-editor pre .hljs-template-variable,
+[data-theme="night"] .card-editor pre .hljs-attr { color: #bcaaa4; }
+[data-theme="night"] .card-editor pre .hljs-built_in,
+[data-theme="night"] .card-editor pre .hljs-selector-attr { color: #80cbc4; }
+[data-theme="night"] .card-editor pre .hljs-params { color: #e0e0e2; }
+[data-theme="night"] .card-editor pre .hljs-tag { color: #90a4ae; }
+[data-theme="night"] .card-editor pre .hljs-name { color: #b388ff; }
+[data-theme="night"] .card-editor pre .hljs-attribute { color: #9ccc65; }
+[data-theme="night"] .card-editor pre .hljs-regexp,
+[data-theme="night"] .card-editor pre .hljs-link { color: #f48fb1; }
+[data-theme="night"] .card-editor pre .hljs-meta { color: #a1887f; }
 .card-editor a { color: var(--accent); }
 /* 粘贴/内嵌的图片（截图等） */
 .card-editor img {

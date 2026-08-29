@@ -212,6 +212,8 @@
                 pre.textContent = code.textContent; // 保留代码内容（含换行）
               }
             });
+            // 代码块语法高亮（highlight.js via preload）
+            highlightCodeBlocks(editor);
           }
         }
       })
@@ -222,6 +224,120 @@
   function escapeAttr(s) {
     return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  // ============================================================
+  //  代码块高亮（highlight.js via preload）
+  //  设计：展示态 pre 内是高亮 span；进入编辑（focus）时还原为纯文本，
+  //  保证 contenteditable 的编辑行为与之前完全一致（回车/退出逻辑不受影响）；
+  //  失焦时重新高亮。turndown 序列化用递归提取文本，span 不影响 Markdown 往返。
+  // ============================================================
+
+  /** 提取 pre 的纯代码文本（span 穿透、<br> 视为换行） */
+  function preCodeText(pre) {
+    let s = '';
+    const walk = (node) => {
+      for (const child of node.childNodes) {
+        if (child.nodeType === 3) s += child.data;
+        else if (child.nodeName === 'BR') s += '\n';
+        else walk(child);
+      }
+    };
+    walk(pre);
+    return s;
+  }
+
+  /** 对编辑器内所有代码块应用高亮（跳过已高亮 / 空代码块） */
+  function highlightCodeBlocks(editor) {
+    if (!editor || !api.highlightCode) return;
+    editor.querySelectorAll('pre').forEach((pre) => {
+      if (pre.querySelector('span[class*="hljs-"]')) return; // 已高亮
+      const text = preCodeText(pre);
+      if (!text.trim()) return; // 空代码块保持纯文本（输入占位）
+      const lang = (pre.className.match(/language-(\S+)/) || [])[1];
+      Promise.resolve(api.highlightCode(text, lang)).then((html) => {
+        if (pre.isConnected && !pre.querySelector('span[class*="hljs-"]')) {
+          pre.innerHTML = html;
+        }
+      }).catch(() => {});
+    });
+  }
+
+  /** 把代码块的高亮 span 还原为纯文本（进入编辑前调用，避免 span 干扰输入） */
+  function stripCodeHighlight(pre) {
+    if (!pre || !pre.querySelector('span[class*="hljs-"]')) return;
+    pre.textContent = preCodeText(pre);
+  }
+
+  /** 计算光标在 pre 内的字符偏移（编辑前保存，还原纯文本后恢复位置） */
+  function caretOffsetIn(pre) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return -1;
+    const range = sel.getRangeAt(0);
+    if (!pre.contains(range.startContainer)) return -1;
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node === range.startContainer) { offset += range.startOffset; return offset; }
+      offset += node.data.length;
+    }
+    return offset;
+  }
+
+  /** 按字符偏移把光标恢复到 pre 内（strip 高亮后调用） */
+  function restoreCaretTo(pre, offset) {
+    if (!pre || offset < 0) return;
+    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+    let node;
+    let remaining = offset;
+    let target = null;
+    let targetOffset = 0;
+    while ((node = walker.nextNode())) {
+      if (remaining <= node.data.length) {
+        target = node; targetOffset = remaining; break;
+      }
+      remaining -= node.data.length;
+    }
+    if (!target && pre.lastChild) {
+      // 偏移超出末尾 → 定位到最后一个文本节点末尾
+      target = pre.lastChild.nodeType === 3 ? pre.lastChild : null;
+      targetOffset = target ? target.data.length : 0;
+      if (!target) {
+        // 无文本节点（如只有 <br>）→ 定位到 pre 开头
+        const r0 = document.createRange();
+        r0.setStart(pre, 0); r0.collapse(true);
+        const sel0 = window.getSelection();
+        sel0.removeAllRanges(); sel0.addRange(r0);
+        return;
+      }
+    }
+    if (target) {
+      const r = document.createRange();
+      r.setStart(target, targetOffset);
+      r.collapse(true);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }
+
+  // 代码块高亮：聚焦编辑时还原纯文本，失焦时重新高亮（事件委托在 #taskList）
+  function onEditorFocusIn(e) {
+    const pre = e.target.closest && e.target.closest('pre');
+    if (!pre) return;
+    pre.dataset.caretOffset = String(caretOffsetIn(pre));
+    stripCodeHighlight(pre);
+    restoreCaretTo(pre, parseInt(pre.dataset.caretOffset, 10) || 0);
+  }
+
+  function onEditorFocusOut(e) {
+    const editor = e.target.closest && e.target.closest('.card-editor');
+    if (!editor) return;
+    // 焦点移到编辑器内部（如 pre 之间）不重新高亮，避免打断
+    if (editor.contains(e.relatedTarget)) return;
+    highlightCodeBlocks(editor);
+  }
+
   /**
    * 完整 HTML 转义（用于 innerHTML 注入的文本）。
    * 备注内容可能含 < > & 等字符（如用户粘贴的 HTML/代码），
@@ -905,6 +1021,14 @@
         const codeBlock = caretInCodeBlock(actionEl);
         if (codeBlock) {
           e.preventDefault();
+          // 关键：先还原为纯文本再执行回车。高亮 span 会让 Chromium 的
+          // insertLineBreak 行为不稳定（拆出新的 <pre> 代码块）—— 与当初去掉
+          // 行内 <code> 是同一个教训。strip 后保持原光标偏移。
+          if (codeBlock.querySelector('span[class*="hljs-"]')) {
+            const off = caretOffsetIn(codeBlock);
+            stripCodeHighlight(codeBlock);
+            restoreCaretTo(codeBlock, off);
+          }
           if (!e.shiftKey && isCodeLineEmpty(codeBlock)) {
             exitCodeBlock(codeBlock, actionEl, id);
           } else {
@@ -1347,8 +1471,59 @@
     }
     if (!hasImage) {
       const text = e.clipboardData.getData('text/plain');
-      document.execCommand('insertText', false, text);
+      insertTextAtCaret(editor, text, id);
     }
+  }
+
+  /**
+   * 在光标处插入纯文本（替代 execCommand('insertText')）。
+   * 不用原生命令的原因：
+   *  - Chromium 的 insertText 会把多行文本中的空行（\n\n）拆成多个块级元素，
+   *    粘贴代码会被打散成多个独立块，观感像"散成多个代码块"；
+   *  - 在代码块（pre）内，insertText 也会破坏高亮 span 结构。
+   * 自定义行为：
+   *  - 光标在 pre 内 → 插入含 \n 的文本节点（pre 的 white-space 保留换行，仍是单个代码块）；
+   *  - 光标在普通文本 → 行间用 <br> 软换行，不产生新块（turndown <br>→\n 往返无损）。
+   */
+  function insertTextAtCaret(editor, text, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const startNode = range.startContainer;
+    // 光标所在代码块（若在 pre 内）
+    const pre = startNode.nodeType === 1
+      ? (startNode.closest && startNode.closest('pre'))
+      : (startNode.parentElement && startNode.parentElement.closest('pre'));
+    // pre 内若还是高亮 span（如通过 Tab/程序聚焦），先还原纯文本并恢复光标
+    if (pre && pre.querySelector('span[class*="hljs-"]')) {
+      const off = caretOffsetIn(pre);
+      stripCodeHighlight(pre);
+      restoreCaretTo(pre, off);
+    }
+
+    range.deleteContents();
+    const frag = document.createDocumentFragment();
+    if (pre) {
+      // 代码块内：整段作为一个文本节点插入（含换行），保持单个 pre
+      frag.appendChild(document.createTextNode(String(text)));
+    } else {
+      const lines = String(text).split('\n');
+      lines.forEach((line, i) => {
+        if (i > 0) frag.appendChild(document.createElement('br'));
+        frag.appendChild(document.createTextNode(line));
+      });
+    }
+    const last = frag.lastChild;
+    range.insertNode(frag);
+    // 光标移到插入内容末尾
+    if (last) {
+      const r = document.createRange();
+      r.setStartAfter(last);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+    syncEditorNote(editor, id);
   }
 
   /** 读取文件为 dataURL */
@@ -1384,6 +1559,9 @@
     taskListEl.addEventListener('input', onTaskListInput);
     taskListEl.addEventListener('keydown', onTaskListKeyDown);
     taskListEl.addEventListener('paste', onTaskListPaste);
+    // 代码块高亮：进入编辑还原纯文本，失焦重新高亮
+    taskListEl.addEventListener('focusin', onEditorFocusIn);
+    taskListEl.addEventListener('focusout', onEditorFocusOut);
     document.addEventListener('keydown', onGlobalKeyDown);
 
     // 点击卡片外任意处 → 取消待办标题的选中效果（批量模式下不干扰多选）

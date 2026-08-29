@@ -3,12 +3,75 @@
 const { contextBridge, ipcRenderer } = require('electron');
 const { marked } = require('marked');
 const TurndownService = require('turndown');
+const hljs = require('highlight.js');
 
 // 配置 marked：开启 GFM（含任务列表复选框）+ breaks（换行即 <br>）
 marked.setOptions({
   gfm: true,
   breaks: true
 });
+
+// ===== 代码高亮（highlight.js）=====
+// Vue 单文件组件没有内置语言，注册一个自定义定义：
+// template → xml 高亮、<script> → javascript、<style> → css/scss/stylus
+hljs.registerLanguage('vue', function (hljs_) {
+  return {
+    subLanguage: 'xml',
+    contains: [
+      hljs_.COMMENT('<!--', '-->', { relevance: 10 }),
+      {
+        begin: /^(\s*)(<script(\s[^>]*)?>)/gm,
+        end: /^(\s*)(<\/script>)/gm,
+        subLanguage: 'javascript',
+        excludeBegin: true,
+        excludeEnd: true
+      },
+      {
+        begin: /^(\s*)(<style(\s[^>]*)?>)/gm,
+        end: /^(\s*)(<\/style>)/gm,
+        subLanguage: 'css',
+        excludeBegin: true,
+        excludeEnd: true
+      }
+    ]
+  };
+});
+
+// 语言别名：用户常用简称 → highlight.js 语言名
+const LANG_ALIASES = {
+  js: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript',
+  sh: 'bash', shell: 'bash', zsh: 'bash', py: 'python',
+  cs: 'csharp', 'c#': 'csharp', 'csharp': 'csharp', 'vb': 'vbnet', 'vbnet': 'vbnet',
+  '.net': 'csharp', 'net': 'csharp', 'vue': 'vue', 'vuejs': 'vue',
+  html: 'xml', htm: 'xml', yml: 'yaml', yaml: 'yaml', md: 'markdown',
+  txt: 'plaintext', text: 'plaintext', plain: 'plaintext'
+};
+
+/** 把用户写的语言名规范化成 highlight.js 可用语言名（找不到返回 null） */
+function resolveHighlightLang(lang) {
+  if (!lang) return null;
+  const key = String(lang).trim().toLowerCase();
+  if (LANG_ALIASES[key]) return hljs.getLanguage(LANG_ALIASES[key]) ? LANG_ALIASES[key] : null;
+  return hljs.getLanguage(key) ? key : null;
+}
+
+/** 高亮代码文本，返回含 <span class="hljs-*"> 的 HTML；语言无效或高亮失败时返回转义文本 */
+function highlightCode(code, lang) {
+  const text = code == null ? '' : String(code);
+  const resolved = resolveHighlightLang(lang);
+  if (!resolved) return escapeHtmlForPre(text);
+  try {
+    const result = hljs.highlight(text, { language: resolved, ignoreIllegals: true });
+    return result.value;
+  } catch (_) {
+    return escapeHtmlForPre(text);
+  }
+}
+
+/** 代码块内文本转义（< > & 需转义，否则会被当 HTML 解析破坏结构） */
+function escapeHtmlForPre(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 // 所见即所得编辑器：contenteditable DOM → Markdown（turndown）
 // 自定义规则保证 marked → turndown 往返无损：
@@ -23,9 +86,16 @@ const turndownService = new TurndownService({
   strongDelimiter: '**',
   linkStyle: 'inlined'
 });
+// 软换行：<br> → \n；若前一个兄弟节点也是 <br>（连续空行，如粘贴多行文本），
+// 输出 \n\n 保留空行（turndown 默认会把相邻 br 折叠成单个换行，丢失空行）
 turndownService.addRule('br', {
   filter: 'br',
-  replacement: () => '\n'
+  replacement: (content, node) => {
+    let prev = node.previousSibling;
+    while (prev && prev.nodeType === 3 && !prev.data) prev = prev.previousSibling; // 跳过空白文本
+    const isDouble = prev && prev.nodeName === 'BR';
+    return isDouble ? '\n\n' : '\n';
+  }
 });
 turndownService.addRule('taskListCheckbox', {
   filter: (node) => node.nodeName === 'INPUT' && node.type === 'checkbox',
@@ -134,6 +204,9 @@ contextBridge.exposeInMainWorld('api', {
 
   // Markdown 渲染（在 preload 中执行，避免渲染进程直接持有 marked）
   renderMarkdown: (text) => marked.parse(text == null ? '' : String(text)),
+
+  // 代码高亮：返回含 <span class="hljs-*"> 的 HTML（语言无效则返回转义文本）
+  highlightCode: (code, lang) => highlightCode(code, lang),
 
   // 所见即所得编辑器：contenteditable 的 innerHTML → Markdown（turndown）
   htmlToMarkdown: (html) => turndownService.turndown(html == null ? '' : String(html)),
