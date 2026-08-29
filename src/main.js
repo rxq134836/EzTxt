@@ -173,8 +173,30 @@ async function atomicWrite(targetPath, content, encoding = 'utf8', retries = 5) 
 const DEFAULT_SETTINGS = {
   theme: 'blue',          // 主题 key
   bgImage: null,          // dataURL 或 null（背景图由渲染层 FileReader 读成 base64 直接存）
-  bgOpacity: 0.35         // 背景图不透明度（让卡片仍可读）
+  bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
+  // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
+  shortcuts: {
+    bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
+    italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false },
+    inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false },
+    codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false },
+    orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false },
+    unorderedList: { enabled: true, key: ']', ctrl: true,  shift: true,  alt: false }
+  }
 };
+
+/** 合并设置：shortcuts 逐项合并，保证老配置缺项时用默认值兜底 */
+function mergeSettings(base, data) {
+  const shortcuts = { ...(base.shortcuts || {}) };
+  for (const [name, value] of Object.entries(data?.shortcuts || {})) {
+    shortcuts[name] = { ...(shortcuts[name] || {}), ...value };
+  }
+  return {
+    ...base,
+    ...data,
+    shortcuts
+  };
+}
 
 async function loadSettings() {
   try {
@@ -185,7 +207,7 @@ async function loadSettings() {
     }
     const raw = (await fs.readFile(SETTINGS_FILE, 'utf8')).replace(/^\uFEFF/, '');
     const data = JSON.parse(raw);
-    return { ...DEFAULT_SETTINGS, ...data };
+    return mergeSettings(DEFAULT_SETTINGS, data);
   } catch (err) {
     console.error('加载设置失败：', err);
     return { ...DEFAULT_SETTINGS };
@@ -196,7 +218,7 @@ async function saveSettings(_, patch) {
   try {
     await ensureStorageDir();
     const current = await loadSettings();
-    const merged = { ...current, ...patch };
+    const merged = mergeSettings(current, patch);
     await atomicWrite(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
     return { ok: true, settings: merged };
   } catch (err) {

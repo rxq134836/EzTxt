@@ -42,6 +42,10 @@
   const btnTheme = $('#btnTheme');
   const themePanel = $('#themePanel');
   const themeSwatches = $('#themeSwatches');
+  const btnSettings = $('#btnSettings');
+  const settingsPage = $('#settingsPage');
+  const btnSettingsBack = $('#btnSettingsBack');
+  const shortcutListEl = $('#shortcutList');
   const miniBar = $('#miniBar');
   const miniCount = $('#miniCount');
   const bgImageLayer = $('#bgImageLayer');
@@ -72,9 +76,71 @@
     { key: 'rose',       name: '酒红', accent: '#954B44', bg: '#F5E5E0', ink: '#3a1f1b' },
     { key: 'sage',       name: '草绿', accent: '#A68329', bg: '#F5F0D4', ink: '#3a2f14' }
   ];
-  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35 };
+  let settings = { theme: 'amber', bgImage: null, bgOpacity: 0.35, shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
+
+  // ===== 编辑器快捷键（设置面板可开关 / 改绑） =====
+  // 目录：默认键位 + 显示名；settings.shortcuts 中存用户覆盖 { enabled, key, ctrl, shift, alt }
+  const DEFAULT_SHORTCUTS = {
+    bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false, label: '加粗' },
+    italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false, label: '斜体' },
+    inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false, label: '行内代码' },
+    codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false, label: '代码块' },
+    orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false, label: '有序列表' },
+    unorderedList: { enabled: true, key: ']', ctrl: true,  shift: true,  alt: false, label: '无序列表' }
+  };
+  const SHORTCUT_HANDLERS = {
+    bold: () => document.execCommand('bold'),
+    italic: () => document.execCommand('italic'),
+    inlineCode: (editor, id) => wrapSelectionWith('code', editor, id),
+    codeBlock: () => document.execCommand('formatBlock', false, 'pre'),
+    orderedList: () => document.execCommand('insertOrderedList'),
+    unorderedList: () => document.execCommand('insertUnorderedList')
+  };
+  // Shift 键产生的字符变化（匹配 Ctrl+Shift+[ 时 e.key 可能是 '{'）
+  const SHIFT_CHARS = { '[': '{', ']': '}', '`': '~', ';': ':', "'": '"', ',': '<', '.': '>', '/': '?', '-': '_', '=': '+', '1': '!', '2': '@', '3': '#', '4': '$', '5': '%', '6': '^', '7': '&', '8': '*', '9': '(', '0': ')' };
+  let capturingShortcut = null; // 正在改绑的快捷键名，null 表示未在改绑
+
+  /** 判断按键事件是否匹配某组合 */
+  function matchShortcut(combo, e) {
+    if (!combo || combo.enabled === false || !combo.key) return false;
+    if (!!combo.ctrl !== !!(e.ctrlKey || e.metaKey)) return false;
+    if (!!combo.shift !== !!e.shiftKey) return false;
+    if (!!combo.alt !== !!e.altKey) return false;
+    const k = String(combo.key).toLowerCase();
+    const ek = e.key.toLowerCase();
+    if (ek === k) return true;
+    if (SHIFT_CHARS[k] && ek === SHIFT_CHARS[k]) return true;       // 绑定 '['，实际按下 '{'
+    if (SHIFT_CHARS[ek] === k) return true;                          // 绑定 '{'，实际按下 '['
+    return false;
+  }
+
+  /** 组合键显示文本，如 Ctrl+Shift+K */
+  function formatCombo(c) {
+    if (!c || !c.key) return '未绑定';
+    const parts = [];
+    if (c.ctrl) parts.push('Ctrl');
+    if (c.alt) parts.push('Alt');
+    if (c.shift) parts.push('Shift');
+    const k = String(c.key);
+    parts.push(k.length === 1 ? k.toUpperCase() : k);
+    return parts.join('+');
+  }
+
+  /** 生成可持久化的 shortcuts（去掉 label） */
+  function shortcutsPayload() {
+    const out = {};
+    for (const [name, def] of Object.entries(DEFAULT_SHORTCUTS)) {
+      const s = settings.shortcuts[name] || def;
+      out[name] = { enabled: !!s.enabled, key: s.key || '', ctrl: !!s.ctrl, shift: !!s.shift, alt: !!s.alt };
+    }
+    return out;
+  }
+
+  function saveShortcuts() {
+    api.saveSettings({ shortcuts: shortcutsPayload() });
+  }
 
   function uid() {
     // 渲染层生成 id 用时间戳+随机，主进程再兜底换 crypto.randomBytes
@@ -577,6 +643,48 @@
     return true;
   }
 
+  /**
+   * 光标当前是否位于代码块（<pre> 或行内 <code>）内。
+   * @returns {HTMLElement|null} pre/code 元素，或 null
+   */
+  function caretInCodeBlock(editor) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return null;
+    const node = sel.getRangeAt(0).startContainer;
+    const el = node.nodeType === 1 ? node : node.parentElement;
+    const block = el && el.closest ? el.closest('pre,code') : null;
+    if (!block || !editor.contains(block)) return null;
+    return block;
+  }
+
+  /**
+   * 代码块内回车：只插入换行，不拆分割裂代码元素。
+   * - <pre>（代码块）：插入 '\n' 文本节点（pre 保留换行，turndown 序列化不丢行）
+   * - 行内 <code>：插入 <br>（turndown 的 br→\n 规则会转回换行）
+   */
+  function insertCodeNewline(block, editor, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    // <pre> 或 <pre> 内的 <code> → 插入 '\n'（pre 保留换行，turndown 序列化不丢行）；
+    // 行内 <code>（不在 pre 内）→ 插入 <br>（turndown 的 br→\n 规则转回换行）
+    const inPre = block.tagName === 'PRE' || (block.tagName === 'CODE' && block.closest('pre'));
+    if (inPre) {
+      const tn = document.createTextNode('\n');
+      range.insertNode(tn);
+      const r = document.createRange();
+      r.setStartAfter(tn);
+      r.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(r);
+    } else {
+      document.execCommand('insertLineBreak');
+    }
+    // 手动 DOM 变更不触发 input 事件，这里同步一次（execCommand 路径重复同步无害）
+    syncEditorNote(editor, id);
+  }
+
   function onTaskListClick(e) {
     const target = e.target;
     const li = target.closest('.task-card');
@@ -640,12 +748,20 @@
 
     if (action === 'edit-note') {
       // 所见即所得编辑器（contenteditable）：用原生富文本命令，格式即时可见
-      const ctrl = e.ctrlKey || e.metaKey;
 
-      // Enter + 行首 ```[语言] → 代码块（Typora 输入习惯，如 ```node / ```js 回车）
-      if (e.key === 'Enter' && !e.shiftKey && fenceToCodeBlock(actionEl, id)) {
-        e.preventDefault();
-        return;
+      // Enter：在代码块内只插换行（避免被 Chromium 拆分成两个代码块）；
+      // 行首 ```[语言] 则新建代码块（Typora 输入习惯，如 ```node / ```js 回车）
+      if (e.key === 'Enter') {
+        const codeBlock = caretInCodeBlock(actionEl);
+        if (codeBlock) {
+          e.preventDefault();
+          insertCodeNewline(codeBlock, actionEl, id);
+          return;
+        }
+        if (!e.shiftKey && fenceToCodeBlock(actionEl, id)) {
+          e.preventDefault();
+          return;
+        }
       }
 
       // Tab / Shift+Tab：缩进 / 反缩进（列表内缩进嵌套层级）
@@ -654,41 +770,13 @@
         document.execCommand(e.shiftKey ? 'outdent' : 'indent');
         return;
       }
-      // Ctrl+B 加粗
-      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'b') {
-        e.preventDefault();
-        document.execCommand('bold');
-        return;
-      }
-      // Ctrl+I 斜体
-      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'i') {
-        e.preventDefault();
-        document.execCommand('italic');
-        return;
-      }
-      // Ctrl+K 行内代码：用 <code> 包裹选区
-      if (ctrl && !e.shiftKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        wrapSelectionWith('code', actionEl, id);
-        return;
-      }
-      // Ctrl+Shift+K 代码块
-      if (ctrl && e.shiftKey && e.key.toLowerCase() === 'k') {
-        e.preventDefault();
-        document.execCommand('formatBlock', false, 'pre');
-        return;
-      }
-      // Ctrl+Shift+[ 有序列表（Typora 风格；部分键盘 Shift 后 key 为 '{'）
-      if (ctrl && e.shiftKey && (e.key === '[' || e.key === '{')) {
-        e.preventDefault();
-        document.execCommand('insertOrderedList');
-        return;
-      }
-      // Ctrl+Shift+] 无序列表（Typora 风格；部分键盘 Shift 后 key 为 '}'）
-      if (ctrl && e.shiftKey && (e.key === ']' || e.key === '}')) {
-        e.preventDefault();
-        document.execCommand('insertUnorderedList');
-        return;
+      // 编辑器快捷键（键位与开关来自设置面板，可改绑）
+      for (const [name, handler] of Object.entries(SHORTCUT_HANDLERS)) {
+        if (matchShortcut(settings.shortcuts[name], e)) {
+          e.preventDefault();
+          handler(actionEl, id);
+          return;
+        }
       }
       // Enter 延续列表：contenteditable 原生行为（li 内回车自动续项、空项回车结束列表）
       // Shift+Enter：软换行，原生 <br>
@@ -734,15 +822,24 @@
         deleteSelected();
       }
     }
-    // Esc：关闭帮助 / 搜索条 / 主题面板
+    // Esc：关闭帮助 / 设置页 / 主题面板 / 搜索条
     if (e.key === 'Escape') {
       if (!helpPanel.classList.contains('hidden')) {
         toggleHelp(false);
+      } else if (document.body.classList.contains('showing-settings')) {
+        toggleSettingsPage(false);
       } else if (!themePanel.classList.contains('hidden')) {
         toggleThemePanel(false);
       } else if (!searchbarEl.classList.contains('hidden')) {
         toggleSearch(false);
       }
+    }
+    // Ctrl+,：打开 / 关闭设置页
+    if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+      e.preventDefault();
+      toggleHelp(false);
+      toggleThemePanel(false);
+      toggleSettingsPage();
     }
   }
 
@@ -777,6 +874,111 @@
     const show = typeof force === 'boolean' ? force : themePanel.classList.contains('hidden');
     themePanel.classList.toggle('hidden', !show);
     btnTheme.classList.toggle('is-active', show);
+  }
+
+  // ============================================================
+  //  设置页（整页视图）：快捷键开关 / 改绑
+  // ============================================================
+
+  function toggleSettingsPage(force) {
+    const show = typeof force === 'boolean' ? force : !document.body.classList.contains('showing-settings');
+    document.body.classList.toggle('showing-settings', show);
+    btnSettings.classList.toggle('is-active', show);
+    if (show) renderShortcutList();
+    else endShortcutCapture();
+  }
+
+  /** 渲染快捷键列表：每行 = 名称 + 开关 + 按键徽标 */
+  function renderShortcutList() {
+    if (!shortcutListEl) return;
+    shortcutListEl.innerHTML = '';
+    for (const [name, def] of Object.entries(DEFAULT_SHORTCUTS)) {
+      const s = settings.shortcuts[name] || def;
+      const row = document.createElement('div');
+      row.className = 'shortcut-row' + (s.enabled === false ? ' disabled' : '');
+
+      const label = document.createElement('span');
+      label.className = 'shortcut-label';
+      label.textContent = def.label;
+
+      // 启用开关
+      const sw = document.createElement('label');
+      sw.className = 'switch';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = s.enabled !== false;
+      input.title = '启用 / 停用';
+      const slider = document.createElement('span');
+      slider.className = 'slider';
+      sw.appendChild(input);
+      sw.appendChild(slider);
+      input.addEventListener('change', () => {
+        settings.shortcuts[name] = { ...(settings.shortcuts[name] || def), enabled: input.checked };
+        saveShortcuts();
+        row.classList.toggle('disabled', !input.checked);
+      });
+
+      // 按键徽标（点击改绑）
+      const badge = document.createElement('button');
+      badge.type = 'button';
+      badge.className = 'shortcut-key' + (!s.key ? ' unbound' : '');
+      badge.textContent = s.key ? formatCombo(s) : '未绑定';
+      badge.title = '点击重新绑定';
+      badge.addEventListener('click', () => beginShortcutCapture(name, badge));
+
+      row.appendChild(label);
+      row.appendChild(sw);
+      row.appendChild(badge);
+      shortcutListEl.appendChild(row);
+    }
+  }
+
+  /** 进入改绑模式：捕获下一次按键组合 */
+  function beginShortcutCapture(name, badge) {
+    capturingShortcut = name;
+    document.querySelectorAll('.shortcut-key').forEach((el) => el.classList.remove('capturing'));
+    badge.classList.add('capturing');
+    badge.textContent = '按下组合键…';
+    document.addEventListener('keydown', onShortcutCaptureKeydown, true);
+  }
+
+  function endShortcutCapture() {
+    if (!capturingShortcut) return;
+    capturingShortcut = null;
+    document.removeEventListener('keydown', onShortcutCaptureKeydown, true);
+    renderShortcutList();
+  }
+
+  /** 改绑捕获：Esc 取消；Backspace/Delete 解绑；需 Ctrl/Alt 组合或功能键 */
+  function onShortcutCaptureKeydown(e) {
+    if (!capturingShortcut) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const name = capturingShortcut;
+    if (e.key === 'Escape') { endShortcutCapture(); return; }
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      settings.shortcuts[name] = { enabled: false, key: '', ctrl: false, shift: false, alt: false };
+      endShortcutCapture();
+      saveShortcuts();
+      return;
+    }
+    const hasMod = e.ctrlKey || e.metaKey || e.altKey;
+    const isFn = /^F\d{1,2}$/i.test(e.key);
+    if (!hasMod && !isFn) {
+      // 无修饰键的普通键不允许（会与正常输入冲突），提示后继续等待
+      const badge = shortcutListEl.querySelector('.shortcut-key.capturing');
+      if (badge) badge.textContent = '需要 Ctrl/Alt 组合';
+      return;
+    }
+    settings.shortcuts[name] = {
+      enabled: true,
+      key: e.key,
+      ctrl: !!(e.ctrlKey || e.metaKey),
+      shift: !!e.shiftKey,
+      alt: !!e.altKey
+    };
+    endShortcutCapture();
+    saveShortcuts();
   }
 
   function applyTheme(key, persist = true) {
@@ -851,6 +1053,11 @@
       isLoadingSettings = true;
       const s = await api.loadSettings();
       Object.assign(settings, s);
+      // 快捷键逐项合并默认值（老配置缺项兜底）
+      settings.shortcuts = settings.shortcuts || {};
+      for (const [name, def] of Object.entries(DEFAULT_SHORTCUTS)) {
+        settings.shortcuts[name] = { ...def, ...(settings.shortcuts[name] || {}) };
+      }
       applyTheme(settings.theme, false);   // 启动加载，不回写磁盘
       applyBgImage(settings.bgImage);
       bgOpacitySlider.value = String(settings.bgOpacity);
@@ -915,11 +1122,20 @@
     // 主题
     btnTheme.addEventListener('click', () => {
       toggleHelp(false);
+      toggleSettingsPage(false);
       toggleThemePanel();
     });
     themePanel.addEventListener('click', (e) => {
       if (e.target === themePanel) toggleThemePanel(false);
     });
+
+    // 设置页
+    btnSettings.addEventListener('click', () => {
+      toggleHelp(false);
+      toggleThemePanel(false);
+      toggleSettingsPage();
+    });
+    btnSettingsBack.addEventListener('click', () => toggleSettingsPage(false));
     btnUploadBg.addEventListener('click', handleBgUpload);
     btnRemoveBg.addEventListener('click', handleBgRemove);
     bgFileInput.addEventListener('change', onBgFileSelected);
@@ -1051,6 +1267,14 @@
     taskListEl.addEventListener('keydown', onTaskListKeyDown);
     taskListEl.addEventListener('paste', onTaskListPaste);
     document.addEventListener('keydown', onGlobalKeyDown);
+
+    // 点击面板外任意处 → 自动收起主题面板
+    document.addEventListener('click', (e) => {
+      if (!themePanel.classList.contains('hidden') &&
+          !themePanel.contains(e.target) && !btnTheme.contains(e.target)) {
+        toggleThemePanel(false);
+      }
+    });
 
     initWindowControls();
     initPinState();
