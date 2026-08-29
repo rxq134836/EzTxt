@@ -136,7 +136,7 @@
                type="text" value="${escapeAttr(item.title)}"
                placeholder="新任务…" spellcheck="false" />
         <span class="card-note-meta${!item.note ? ' is-empty' : ''}"
-              data-action="toggle-expand" title="点击展开备注">${renderNoteMeta(item.note)}</span>
+              data-action="toggle-expand" title="点击展开备注">${escapeHtml(renderNoteMeta(item.note))}</span>
         <button class="card-toggle${item.expanded ? ' is-expanded' : ''}"
                 data-action="toggle-expand" title="展开备注" type="button" aria-label="展开备注">
           <svg viewBox="0 0 16 16" width="12" height="12"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -144,7 +144,7 @@
       </div>
       <div class="card-note">
         <div class="card-editor" data-action="edit-note" contenteditable="true" spellcheck="false"
-             data-placeholder="在此输入 Markdown 备注… (Ctrl+B 加粗 / Ctrl+I 斜体 / Ctrl+K 代码 / Ctrl+Shift+[ ] 列表 / Enter 延续列表)"></div>
+             data-placeholder="在此输入 Markdown 备注… (Ctrl+B 加粗 / Ctrl+K 代码 / Ctrl+Shift+[ ] 列表 / 输入 \`\`\`js 回车=代码块)"></div>
       </div>
     `;
     // 异步把 Markdown 渲染成所见即所得内容（marked 在 preload 中同步执行，
@@ -163,6 +163,19 @@
 
   function escapeAttr(s) {
     return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  /**
+   * 完整 HTML 转义（用于 innerHTML 注入的文本）。
+   * 备注内容可能含 < > & 等字符（如用户粘贴的 HTML/代码），
+   * 不转义会被浏览器解析成真实 DOM，破坏卡片结构（hover 摘要显示异常）。
+   */
+  function escapeHtml(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   /**
@@ -500,6 +513,70 @@
     syncEditorNote(editor, id);
   }
 
+  /**
+   * Typora 式代码块输入：光标所在「行」只含 ``` 或 ```语言 时按回车，
+   * 把该行替换成 <pre><code class="language-xxx"> 代码块，光标落入其中。
+   * 返回 true 表示已转换（调用方应阻止默认的换行行为）。
+   */
+  function fenceToCodeBlock(editor, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const range = sel.getRangeAt(0);
+    const textNode = range.startContainer;
+    if (!textNode || textNode.nodeType !== 3) return false; // 需要文本节点
+    const offset = range.startOffset;
+    const block = textNode.parentElement
+      ? textNode.parentElement.closest('p,div,h1,h2,h3,h4,h5,h6,li,pre')
+      : null;
+    if (!block || !editor.contains(block)) return false;
+
+    // 收集块内光标前的文本（fence 必须是整行内容）
+    let before = '';
+    const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let cur;
+    while ((cur = walker.nextNode())) {
+      if (cur === textNode) { before += textNode.data.slice(0, offset); break; }
+      before += cur.data;
+    }
+    const m = before.match(/^```([a-zA-Z0-9_+-]*)$/);
+    if (!m) return false;
+
+    // 光标后必须只有空白（即光标在行尾）
+    let after = '';
+    const walker2 = document.createTreeWalker(block, NodeFilter.SHOW_TEXT);
+    let reached = false;
+    while ((cur = walker2.nextNode())) {
+      if (cur === textNode) { reached = true; after += textNode.data.slice(offset); continue; }
+      if (reached) after += cur.data;
+    }
+    if (after.trim() !== '') return false;
+
+    // 构造代码块 <pre><code class="language-xxx">
+    const pre = document.createElement('pre');
+    const code = document.createElement('code');
+    if (m[1]) code.className = 'language-' + m[1];
+    pre.appendChild(code);
+
+    if (block === editor) {
+      // 文本直接位于编辑器根：替换光标所在文本节点
+      textNode.parentNode.replaceChild(pre, textNode);
+    } else if (block.tagName === 'LI') {
+      // 列表项内：保留列表结构，代码块嵌进 li
+      block.replaceChildren(pre);
+    } else {
+      block.replaceWith(pre);
+    }
+
+    // 光标落入代码块开头
+    const r = document.createRange();
+    r.setStart(code, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    syncEditorNote(editor, id);
+    return true;
+  }
+
   function onTaskListClick(e) {
     const target = e.target;
     const li = target.closest('.task-card');
@@ -564,6 +641,12 @@
     if (action === 'edit-note') {
       // 所见即所得编辑器（contenteditable）：用原生富文本命令，格式即时可见
       const ctrl = e.ctrlKey || e.metaKey;
+
+      // Enter + 行首 ```[语言] → 代码块（Typora 输入习惯，如 ```node / ```js 回车）
+      if (e.key === 'Enter' && !e.shiftKey && fenceToCodeBlock(actionEl, id)) {
+        e.preventDefault();
+        return;
+      }
 
       // Tab / Shift+Tab：缩进 / 反缩进（列表内缩进嵌套层级）
       if (e.key === 'Tab') {

@@ -32,9 +32,8 @@
     },
     "files": [
       "src/**/*",
-      "!src/logo.jpeg",
-      "!src/logo-0829.png",
-      "!src/logo-0829.ico",
+      "!src/logo-0829-1.png",
+      "!src/logo-0829-1.ico",
       "package.json"
     ],
     "win": {

@@ -1,8 +1,8 @@
 'use strict';
 /**
- * 把 src/logo-0829.png 转成 src/icon.ico(多尺寸 16/32/48/64/128/256)
+ * 把 src/logo-0829-1.png 转成 src/icon.ico(多尺寸 16/32/48/64/128/256)
  * 和 src/icon.png(256px，供 Electron 运行时使用)。
- * 图标源已固定为 logo-0829.png —— 应用图标一律由此生成，勿改回旧 logo。
+ * 图标源已固定为 logo-0829-1.png —— 应用图标一律由此生成，勿改回旧 logo。
  * 运行: node scripts/gen-icon.js
  */
 const path = require('path');
@@ -12,8 +12,8 @@ const pngToIcoMod = require('png-to-ico');
 const pngToIco = pngToIcoMod.default || pngToIcoMod;
 
 const ROOT = path.join(__dirname, '..');
-// 图标源固定为 logo-0829.png（新图标）；改图标请替换此文件后重新运行本脚本
-const SRC = path.join(ROOT, 'src', 'logo-0829.png');
+// 图标源固定为 logo-0829-1.png（最新 logo）；改图标请替换此文件后重新运行本脚本
+const SRC = path.join(ROOT, 'src', 'logo-0829-1.png');
 const DST_ICO = path.join(ROOT, 'src', 'icon.ico');
 const DST_PNG = path.join(ROOT, 'src', 'icon.png'); // 额外留一份 256px PNG 供 Electron 直接使用
 
