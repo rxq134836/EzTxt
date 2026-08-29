@@ -5,11 +5,21 @@
       "title": "测试",
       "done": false,
       "note": "",
-      "expanded": false,
+      "expanded": true,
       "createdAt": "2026-08-29T03:13:23.176Z",
-      "updatedAt": "2026-08-29T03:21:29.248Z",
+      "updatedAt": "2026-08-29T03:23:15.961Z",
       "_idx": 0
+    },
+    {
+      "id": "mtdtg0m8qdfsx9",
+      "title": "",
+      "done": false,
+      "note": "",
+      "expanded": false,
+      "createdAt": "2026-08-29T03:23:34.303Z",
+      "updatedAt": "2026-08-29T03:23:34.303Z",
+      "_idx": 1
     }
   ],
-  "updatedAt": "2026-08-29T03:21:31.258Z"
+  "updatedAt": "2026-08-29T03:23:36.320Z"
 }

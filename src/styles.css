@@ -271,6 +271,8 @@ html, body {
 .tb-btn.danger:hover { background: rgba(217, 83, 79, 0.15); color: var(--danger); }
 .tb-btn.is-active { background: var(--accent-soft); color: var(--accent); }
 .tb-sep { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
+/* 工具栏弹性占位：把右侧的系统功能（设置/帮助）推到最右，与编辑功能区分 */
+.tb-spacer { flex: 1 1 auto; }
 
 /* Search bar */
 .searchbar {
