@@ -621,6 +621,15 @@ html, body {
   font-size: 0.92em;
 }
 .card-editor a { color: var(--accent); }
+/* 粘贴/内嵌的图片（截图等） */
+.card-editor img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 6px 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
 .card-editor hr {
   border: none;
   border-top: 1px solid var(--line);

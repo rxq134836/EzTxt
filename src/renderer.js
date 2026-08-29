@@ -1247,16 +1247,67 @@
   }
 
   /**
-   * 粘贴处理：所见即所得编辑器只插入纯文本，避免网页富文本产生脏 DOM。
-   * （粘贴 Markdown 源码时可直接输入，样式在输入后由 marked 再渲染）
+   * 粘贴处理：
+   * - 剪贴板含图片（微信/QQ/系统截图等）→ 以 <img dataURL> 插入编辑区，
+   *   序列化时 turndown 转回 ![alt](data:...) 存入笔记；
+   * - 否则插入纯文本，避免网页富文本产生脏 DOM。
    */
   function onTaskListPaste(e) {
     const target = e.target;
     const editor = target.closest && target.closest('[data-action="edit-note"]');
     if (!editor) return;
+    const li = target.closest('.task-card');
+    const id = li && li.dataset.id;
     e.preventDefault();
-    const text = e.clipboardData.getData('text/plain');
-    document.execCommand('insertText', false, text);
+
+    const items = e.clipboardData && e.clipboardData.items;
+    let hasImage = false;
+    if (items) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type && item.type.startsWith('image/')) {
+          hasImage = true;
+          const file = item.getAsFile && item.getAsFile();
+          if (file) {
+            readFileAsDataURL(file).then((dataURL) => {
+              insertImageAtCaret(dataURL);
+              syncEditorNote(editor, id);
+            }).catch(() => {});
+          }
+        }
+      }
+    }
+    if (!hasImage) {
+      const text = e.clipboardData.getData('text/plain');
+      document.execCommand('insertText', false, text);
+    }
+  }
+
+  /** 读取文件为 dataURL */
+  function readFileAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /** 在光标处插入图片元素（所见即所得），光标移到图片后 */
+  function insertImageAtCaret(src) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = '';
+    range.insertNode(img);
+    const r = document.createRange();
+    r.setStartAfter(img);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
   }
 
   function init() {
