@@ -229,10 +229,39 @@
   }
 
   /**
-   * 折叠态摘要：截断 Markdown 源文本（不 parse）。
+   * 剥离常见 Markdown 语法标记，得到纯文本（用于折叠摘要，避免显示 **、- 、``` 等）。
+   */
+  function stripMarkdown(text) {
+    let s = String(text || '');
+    // 代码围栏（连同内容）→ 空格
+    s = s.replace(/```[\s\S]*?```/g, ' ');
+    // 行内代码 `code` → code
+    s = s.replace(/`([^`]+)`/g, '$1');
+    // 粗体/斜体 **x** / *x* / __x__ / _x_
+    s = s.replace(/\*\*([^*]+)\*\*/g, '$1')
+         .replace(/__([^_]+)__/g, '$1')
+         .replace(/(^|[^*\w])\*([^*\s][^*]*)\*/g, '$1$2')
+         .replace(/(^|[^_\w])_([^_\s][^_]*)_/g, '$1$2');
+    // 标题 # ## ### …（行首）
+    s = s.replace(/^\s{0,3}#{1,6}\s+/gm, '');
+    // 引用 >
+    s = s.replace(/^\s{0,3}>\s?/gm, '');
+    // 列表标记 - * + 数字.
+    s = s.replace(/^\s{0,3}([-*+]|\d+\.)\s+/gm, '');
+    // 图片/链接 ![alt](url) / [text](url) → 文本
+    s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+         .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
+    // 分隔线 --- / *** / ___
+    s = s.replace(/^\s{0,3}([-*_]){3,}\s*$/gm, '');
+    // 折叠空白
+    return s.replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * 折叠态摘要：剥离 Markdown 语法后截断显示纯文本。
    */
   function renderNoteMeta(note) {
-    const s = (note || '').replace(/\s+/g, ' ').trim();
+    const s = stripMarkdown(note);
     if (!s) return '+ 添加备注';
     return s.length > 32 ? s.slice(0, 32) + '…' : s;
   }

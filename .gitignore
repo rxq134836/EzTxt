@@ -26,3 +26,7 @@ Desktop.ini
 
 # 运行时生成的本地数据（开发时）
 storage/
+
+# 本地数据文件（待办列表 + 设置）—— 不提交，避免每次运行后 git status 都出现改动
+data/note.json
+data/settings.json

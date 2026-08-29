@@ -657,7 +657,10 @@ html, body {
 .save-time { font-variant-numeric: tabular-nums; }
 
 /* ========= 批量删除 ========= */
-body.is-batch-mode .task-card { cursor: pointer; }
+body.is-batch-mode .task-card,
+body.is-batch-mode .task-card * {
+  cursor: pointer !important; /* 整卡可点选，覆盖标题输入框的文本光标 */
+}
 .task-card.is-batch-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
