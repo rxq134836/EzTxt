@@ -211,6 +211,7 @@
                 if (lang) pre.className = 'language-' + lang;
                 pre.textContent = code.textContent; // 保留代码内容（含换行）
               }
+              applyCodeLangBadge(pre); // 右下角语言标识
             });
             // 代码块语法高亮（highlight.js via preload）
             highlightCodeBlocks(editor);
@@ -246,10 +247,19 @@
     return s;
   }
 
+  /** 从 pre 的 class（language-x）提取语言名，写入 data-lang 供右下角标识显示 */
+  function applyCodeLangBadge(pre) {
+    if (!pre) return;
+    const lang = (pre.className.match(/language-(\S+)/) || [])[1];
+    if (lang) pre.dataset.lang = lang;
+    else delete pre.dataset.lang;
+  }
+
   /** 对编辑器内所有代码块应用高亮（跳过已高亮 / 空代码块） */
   function highlightCodeBlocks(editor) {
     if (!editor || !api.highlightCode) return;
     editor.querySelectorAll('pre').forEach((pre) => {
+      applyCodeLangBadge(pre); // 右下角语言标识（语言名取自 class language-x）
       if (pre.querySelector('span[class*="hljs-"]')) return; // 已高亮
       const text = preCodeText(pre);
       if (!text.trim()) return; // 空代码块保持纯文本（输入占位）
@@ -828,6 +838,7 @@
     // 构造代码块 <pre class="language-xxx">（纯 pre，避免行内 code 嵌套导致的编辑异常）
     const pre = document.createElement('pre');
     if (m[1]) pre.className = 'language-' + m[1];
+    applyCodeLangBadge(pre); // 右下角语言标识（``` 后的语言类型）
 
     if (block === editor) {
       // 文本直接位于编辑器根：替换光标所在文本节点

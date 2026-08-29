@@ -630,6 +630,7 @@ body[data-material="acrylic"] .app {
   border-radius: 0 6px 6px 0;
 }
 .card-editor pre {
+  position: relative; /* 语言标识（::after）定位基准 */
   margin: 0 0 8px;
   padding: 8px 10px;
   min-height: 52px; /* 初始约两行文字高度（2×18px 行高 + 上下 16px padding），适合直接输入 */
@@ -641,6 +642,26 @@ body[data-material="acrylic"] .app {
   font-size: 0.92em;
   line-height: 1.5;
 }
+/* 代码块右下角语言标识：内容取自 data-lang（``` 后的语言类型），
+   纯展示用伪元素，不参与 contenteditable 编辑与 Markdown 序列化 */
+.card-editor pre[data-lang] { padding-bottom: 24px; } /* 给右下角标识预留空间，避免遮挡末行代码 */
+.card-editor pre::after {
+  content: attr(data-lang);
+  position: absolute;
+  right: 6px;
+  bottom: 4px;
+  padding: 1px 6px;
+  font-size: 0.78em;
+  line-height: 1.4;
+  font-family: "SFMono-Regular", "Consolas", "Cascadia Code", monospace;
+  color: var(--ink-mute);
+  background: rgba(var(--bg-rgb), 0.6);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  pointer-events: none;
+  user-select: none;
+}
+.card-editor pre:not([data-lang])::after { display: none; }
 .card-editor code {
   font-family: "SFMono-Regular", "Consolas", "Cascadia Code", monospace;
   font-size: 0.92em;
