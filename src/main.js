@@ -12,7 +12,7 @@ let tray = null;
 let isQuitting = false;
 let settingsWindow = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
-let currentMaterial = 'translucent';
+let currentMaterial = 'opaque';
 
 // 存储目录：动态（可由设置页修改）；开发时默认项目 data/，打包后默认 userData/storage
 let STORAGE_DIR = null;
@@ -194,7 +194,8 @@ function enqueueWrite(fn) {
 
 const DEFAULT_SETTINGS = {
   theme: 'blue',          // 主题 key
-  material: 'translucent', // 窗口材质：translucent（半透明）/ acrylic（亚克力磨砂）
+  material: 'opaque',      // 窗口材质：opaque（经典不透明）/ translucent（半透明）/ acrylic（亚克力磨砂）
+  acrylicBlur: 40,         // 亚克力磨砂强度（backdrop-filter 模糊半径 px，0~60）
   bgImage: null,          // 当前背景图 dataURL（渲染层压缩后存入）
   bgHistory: [],          // 最近上传的背景图列表（新→旧，最多 10 张，dataURL）
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
@@ -659,14 +660,14 @@ function registerIpc() {
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());
 
-  // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
+  // 窗口材质（经典 / 半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
   // 透明窗口上 DWM 不渲染 backdrop material（Electron #48031），以 CSS 磨砂效果为主
   ipcMain.on('set-window-material', (_e, material) => {
-    currentMaterial = material === 'acrylic' ? 'acrylic' : 'translucent';
+    currentMaterial = ['opaque', 'translucent', 'acrylic'].includes(material) ? material : 'opaque';
     if (isSnapped) return; // mini 态保持 none（只有球可见），退出时由 exitSnapped 恢复
     if (!mainWindow || mainWindow.isDestroyed()) return;
     try {
-      mainWindow.setBackgroundMaterial(material === 'acrylic' ? 'acrylic' : 'none');
+      mainWindow.setBackgroundMaterial(currentMaterial === 'acrylic' ? 'acrylic' : 'none');
     } catch (_) { /* 系统不支持时忽略（如 Windows 10） */ }
   });
 

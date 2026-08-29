@@ -37,9 +37,20 @@
             <span class="settings-label">材质</span>
           </div>
           <div class="material-options" id="materialOptions">
+            <button class="material-btn" type="button" data-material="opaque">经典</button>
             <button class="material-btn" type="button" data-material="translucent">半透明</button>
             <button class="material-btn" type="button" data-material="acrylic">亚克力</button>
           </div>
+        </div>
+
+        <!-- 磨砂感：仅亚克力材质时显示 -->
+        <div class="settings-block" id="acrylicBlurBlock">
+          <div class="settings-label-row">
+            <span class="settings-label">磨砂感</span>
+            <span class="settings-value" id="acrylicBlurValue">40</span>
+          </div>
+          <input type="range" id="acrylicBlur" min="0" max="60" step="1" value="40" />
+          <div class="range-labels"><span>轻</span><span>重</span></div>
         </div>
 
         <div class="settings-block">

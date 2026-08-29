@@ -74,7 +74,7 @@
     { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
     { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
   ];
-  let settings = { theme: 'amber', material: 'translucent', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
 
@@ -1035,14 +1035,21 @@
     if (persist) api.saveSettings({ theme: key });
   }
 
-  /** 应用窗口材质：translucent（半透明）/ acrylic（亚克力磨砂）。
-   *  半透明=主题色高不透明度+轻模糊；亚克力=低不透明度+强模糊（CSS 磨砂观感），
+  /** 应用窗口材质：opaque（经典不透明）/ translucent（半透明）/ acrylic（亚克力磨砂）。
+   *  经典=实心主题色；半透明=高不透明度+轻模糊；亚克力=低不透明度+强模糊（CSS 磨砂观感），
    *  并尽力调用系统级亚克力（Windows 11 22H2+）。 */
   function applyMaterial(material) {
-    const val = material === 'acrylic' ? 'acrylic' : 'translucent';
+    const val = ['opaque', 'translucent', 'acrylic'].includes(material) ? material : 'opaque';
     settings.material = val;
     document.body.dataset.material = val;
     if (api.setWindowMaterial) api.setWindowMaterial(val);
+  }
+
+  /** 应用亚克力磨砂强度（--acrylic-blur 变量，px） */
+  function applyAcrylicBlur(value) {
+    const v = Number.isFinite(value) ? Math.max(0, Math.min(60, Math.round(value))) : 40;
+    settings.acrylicBlur = v;
+    document.documentElement.style.setProperty('--acrylic-blur', v + 'px');
   }
 
   function applyBgImage(dataURL) {
@@ -1070,6 +1077,7 @@
       }
       applyTheme(settings.theme, false);   // 启动加载，不回写磁盘
       applyMaterial(settings.material);    // 应用窗口材质（含系统级亚克力）
+      applyAcrylicBlur(settings.acrylicBlur); // 应用亚克力磨砂强度
       applyBgImage(settings.bgImage);
       applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
     } catch (_) {

@@ -13,6 +13,9 @@
   const themeSwatches = $('#themeSwatches');
   const materialOptionsEl = $('#materialOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
+  const acrylicBlurBlock = $('#acrylicBlurBlock');
+  const acrylicBlurSlider = $('#acrylicBlur');
+  const acrylicBlurValueEl = $('#acrylicBlurValue');
   const fontSizeSliderEl = $('#fontSizeSlider');
   const fontSizeValueEl = $('#fontSizeValue');
   const btnUploadBg = $('#btnUploadBg');
@@ -23,7 +26,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'translucent', bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -62,14 +65,17 @@
     }
   }
 
-  // ===== 材质（半透明 / 亚克力） =====
+  // ===== 材质（经典 / 半透明 / 亚克力） =====
+  const MATERIALS = ['opaque', 'translucent', 'acrylic'];
+
   /** 设置窗口自身立即套用材质样式（磨砂观感跟随主窗口） */
   function applyMaterial(material) {
-    const val = material === 'acrylic' ? 'acrylic' : 'translucent';
+    const val = MATERIALS.includes(material) ? material : 'opaque';
     settings.material = val;
     document.body.dataset.material = val;
     renderMaterialOptions();
     updateBgOpacityVisibility();
+    updateAcrylicBlurVisibility();
   }
 
   function renderMaterialOptions() {
@@ -80,15 +86,39 @@
     });
   }
 
-  /** 亚克力模式下透明度滑杆无意义（磨砂观感由材质本身决定）→ 隐藏 */
+  /** 透明度滑杆只对半透明材质有意义（控制窗口/背景的浓淡）；经典不透明、亚克力磨砂都隐藏 */
   function updateBgOpacityVisibility() {
-    bgOpacityBlock.classList.toggle('hidden', settings.material === 'acrylic');
+    bgOpacityBlock.classList.toggle('hidden', settings.material !== 'translucent');
+  }
+
+  /** 磨砂感滑杆只在亚克力材质下出现 */
+  function updateAcrylicBlurVisibility() {
+    acrylicBlurBlock.classList.toggle('hidden', settings.material !== 'acrylic');
   }
 
   function onMaterialSelect(material) {
     if (material === settings.material) return;
     applyMaterial(material);
     api.saveSettings({ material: settings.material });
+  }
+
+  // ===== 亚克力磨砂强度 =====
+  function applyAcrylicBlur(value) {
+    const v = Number.isFinite(value) ? Math.max(0, Math.min(60, Math.round(value))) : 40;
+    settings.acrylicBlur = v;
+    acrylicBlurSlider.value = String(v);
+    acrylicBlurValueEl.textContent = String(v);
+    document.documentElement.style.setProperty('--acrylic-blur', v + 'px');
+  }
+
+  // 拖动高频触发 → 防抖保存
+  let acrylicBlurTimer = null;
+  function onAcrylicBlurChange() {
+    if (isLoadingSettings) return;
+    const v = parseFloat(acrylicBlurSlider.value);
+    applyAcrylicBlur(v);
+    clearTimeout(acrylicBlurTimer);
+    acrylicBlurTimer = setTimeout(() => api.saveSettings({ acrylicBlur: v }), 150);
   }
 
   // ===== 字体大小 =====
@@ -423,7 +453,8 @@
       }
       document.body.dataset.theme = settings.theme;
       applyFontSize(settings.fontSize);
-      applyMaterial(settings.material);   // 材质（含透明度设置显隐）
+      applyMaterial(settings.material);   // 材质（含透明度/磨砂感设置显隐）
+      applyAcrylicBlur(settings.acrylicBlur); // 磨砂强度（仅亚克力生效）
       bgOpacitySlider.value = String(settings.bgOpacity);
       bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
       // 历史兼容：老配置只有 bgImage 没有 bgHistory → 用当前图初始化
@@ -485,6 +516,7 @@
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.material) onMaterialSelect(btn.dataset.material);
   });
+  acrylicBlurSlider.addEventListener('input', onAcrylicBlurChange);
   fontSizeSliderEl.addEventListener('input', onFontSizeChange);
   btnUploadBg.addEventListener('click', handleBgUpload);
   btnRemoveBg.addEventListener('click', handleBgRemove);
