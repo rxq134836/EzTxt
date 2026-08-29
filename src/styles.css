@@ -369,7 +369,31 @@ html, body {
 .task-card.is-divider hr {
   border: none;
   border-top: 1px dashed var(--line);
-  margin: 10px 4px;
+  margin: 10px 4px 2px;
+}
+/* 分割线可选标题：有内容时始终显示；空标题默认隐藏，hover 显示占位可编辑 */
+.task-card.is-divider .divider-label {
+  display: none;
+  width: calc(100% - 16px);
+  margin: 2px 8px 8px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: calc(var(--font-size) - 1px);
+  font-weight: 600;
+  color: var(--ink-soft);
+  outline: none;
+  user-select: text;
+}
+.task-card.is-divider .divider-label::placeholder { color: var(--ink-mute); font-weight: 500; }
+.task-card.is-divider:hover .divider-label,
+.task-card.is-divider .divider-label:not(.is-empty) {
+  display: block;
+}
+.task-card.is-divider .divider-label:focus {
+  background: var(--surface);
+  color: var(--ink);
 }
 
 .task-row {

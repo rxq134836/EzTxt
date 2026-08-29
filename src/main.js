@@ -57,6 +57,7 @@ function migrateIfNeeded(data) {
       expanded: !!it?.expanded,
       createdAt: typeof it?.createdAt === 'string' ? it.createdAt : now,
       updatedAt: typeof it?.updatedAt === 'string' ? it.updatedAt : now,
+      label: typeof it?.label === 'string' ? it.label : '',  // 分割线可选标题
       _idx: idx
     }));
     return data;
@@ -73,7 +74,8 @@ function migrateIfNeeded(data) {
         note: typeof data.content === 'string' ? data.content : '',
         expanded: false,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        label: ''
       }],
       updatedAt: data.updatedAt || now,
       migratedFrom: 'old-format'
@@ -127,6 +129,7 @@ function saveNote(_, doc) {
         expanded: !!it?.expanded,
         createdAt: typeof it?.createdAt === 'string' ? it.createdAt : now,
         updatedAt: typeof it?.updatedAt === 'string' ? it.updatedAt : now,
+        label: typeof it?.label === 'string' ? it.label : '',  // 分割线可选标题
         _idx: idx
       }));
 

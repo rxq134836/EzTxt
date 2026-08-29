@@ -161,7 +161,12 @@
     if (item.title === '__DIVIDER__') {
       li.classList.add('is-divider');
       li.dataset.type = 'divider';
-      li.innerHTML = '<hr/>';
+      li.innerHTML = `
+        <hr/>
+        <input class="divider-label${item.label ? '' : ' is-empty'}" data-action="edit-divider-label"
+               type="text" value="${escapeAttr(item.label || '')}"
+               placeholder="分区标题（可选）" spellcheck="false" />
+      `;
       return li;
     }
 
@@ -465,6 +470,7 @@
       done: false,
       note: '',
       expanded: false,
+      label: '', // 分割线可选标题
       createdAt: now,
       updatedAt: now
     };
@@ -865,6 +871,13 @@
       const it = findItem(id);
       if (!it) return;
       if (v !== it.title) updateTitle(id, v);
+    } else if (action === 'edit-divider-label') {
+      // 分割线可选标题：空则隐藏输入框（仅 hover 显示占位），非空常显
+      const v = target.value;
+      const it = findItem(id);
+      if (!it) return;
+      target.classList.toggle('is-empty', !v.trim());
+      if (v !== it.label) updateItem(id, { label: v });
     } else if (action === 'edit-note') {
       // 所见即所得编辑器：渲染后的 DOM → Markdown 保存
       syncEditorNote(actionEl, id);
@@ -1253,6 +1266,15 @@
     taskListEl.addEventListener('keydown', onTaskListKeyDown);
     taskListEl.addEventListener('paste', onTaskListPaste);
     document.addEventListener('keydown', onGlobalKeyDown);
+
+    // 点击卡片外任意处 → 取消待办标题的选中效果（批量模式下不干扰多选）
+    document.addEventListener('click', (e) => {
+      if (batchMode) return;
+      if (selectedId && !(e.target.closest && e.target.closest('.task-card'))) {
+        selectedId = null;
+        updateSelection();
+      }
+    });
 
     initWindowControls();
     initPinState();
