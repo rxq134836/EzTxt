@@ -27,6 +27,7 @@
     "appId": "com.eztxt.stickynote",
     "productName": "EzTxt",
     "icon": "src/icon.ico",
+    "afterPack": "./scripts/after-pack.js",
     "directories": {
       "output": "dist"
     },
@@ -38,6 +39,7 @@
     ],
     "win": {
       "icon": "src/icon.ico",
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
