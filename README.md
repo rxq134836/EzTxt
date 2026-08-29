@@ -13,9 +13,9 @@
 
 </div>
 
-![](img\img1.png)
+![](https://gitee.com/rxq134836/easy-txt/blob/master/img/img1.png)
 
-![](img\img2.png)
+![](https://gitee.com/rxq134836/easy-txt/blob/master/img/img2.png)
 
 ---
 
