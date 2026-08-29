@@ -109,33 +109,35 @@ async function loadNote() {
   }
 }
 
-async function saveNote(_, doc) {
-  try {
-    if (!existsSync(STORAGE_DIR)) {
-      await fs.mkdir(STORAGE_DIR, { recursive: true });
+function saveNote(_, doc) {
+  return enqueueWrite(async () => {
+    try {
+      if (!existsSync(STORAGE_DIR)) {
+        await fs.mkdir(STORAGE_DIR, { recursive: true });
+      }
+      const items = Array.isArray(doc?.items) ? doc.items : [];
+      const now = new Date().toISOString();
+
+      // 规范化 + 兜底
+      const normalized = items.map((it, idx) => ({
+        id: typeof it?.id === 'string' && it.id ? it.id : uid(),
+        title: typeof it?.title === 'string' ? it.title : '',
+        done: !!it?.done,
+        note: typeof it?.note === 'string' ? it.note : '',
+        expanded: !!it?.expanded,
+        createdAt: typeof it?.createdAt === 'string' ? it.createdAt : now,
+        updatedAt: typeof it?.updatedAt === 'string' ? it.updatedAt : now,
+        _idx: idx
+      }));
+
+      const payload = { items: normalized, updatedAt: now };
+      await atomicWrite(NOTE_FILE, JSON.stringify(payload, null, 2), 'utf8');
+      return { ok: true, updatedAt: now, count: normalized.length };
+    } catch (err) {
+      console.error('保存笔记失败：', err);
+      return { ok: false, error: String(err) };
     }
-    const items = Array.isArray(doc?.items) ? doc.items : [];
-    const now = new Date().toISOString();
-
-    // 规范化 + 兜底
-    const normalized = items.map((it, idx) => ({
-      id: typeof it?.id === 'string' && it.id ? it.id : uid(),
-      title: typeof it?.title === 'string' ? it.title : '',
-      done: !!it?.done,
-      note: typeof it?.note === 'string' ? it.note : '',
-      expanded: !!it?.expanded,
-      createdAt: typeof it?.createdAt === 'string' ? it.createdAt : now,
-      updatedAt: typeof it?.updatedAt === 'string' ? it.updatedAt : now,
-      _idx: idx
-    }));
-
-    const payload = { items: normalized, updatedAt: now };
-    await atomicWrite(NOTE_FILE, JSON.stringify(payload, null, 2), 'utf8');
-    return { ok: true, updatedAt: now, count: normalized.length };
-  } catch (err) {
-    console.error('保存笔记失败：', err);
-    return { ok: false, error: String(err) };
-  }
+  });
 }
 
 async function ensureStorageDir() {
@@ -169,6 +171,19 @@ async function atomicWrite(targetPath, content, encoding = 'utf8', retries = 5) 
     }
   }
   throw lastErr;
+}
+
+/**
+ * 串行化「读→改→写」队列：
+ * 滑杆/快捷键等会快速连续触发保存，若并发执行，多个写入共用同一个 .tmp 文件，
+ * 相互截断覆盖会把 JSON 写坏（表现为 parse 报 "Unexpected non-whitespace character"）。
+ * 队列保证同一时刻只有一个读写事务在跑。
+ */
+let fileWriteChain = Promise.resolve();
+function enqueueWrite(fn) {
+  const run = fileWriteChain.then(fn, fn);
+  fileWriteChain = run.then(() => {}, () => {});
+  return run;
 }
 
 const DEFAULT_SETTINGS = {
@@ -216,21 +231,23 @@ async function loadSettings() {
   }
 }
 
-async function saveSettings(_, patch) {
-  try {
-    await ensureStorageDir();
-    const current = await loadSettings();
-    const merged = mergeSettings(current, patch);
-    await atomicWrite(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
-    // 通知主窗口重新加载设置（主题/字号/快捷键即时生效）
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('settings-changed');
+function saveSettings(_, patch) {
+  return enqueueWrite(async () => {
+    try {
+      await ensureStorageDir();
+      const current = await loadSettings();
+      const merged = mergeSettings(current, patch);
+      await atomicWrite(SETTINGS_FILE, JSON.stringify(merged, null, 2), 'utf8');
+      // 通知主窗口重新加载设置（主题/字号/快捷键即时生效）
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('settings-changed');
+      }
+      return { ok: true, settings: merged };
+    } catch (err) {
+      console.error('保存设置失败：', err);
+      return { ok: false, error: String(err) };
     }
-    return { ok: true, settings: merged };
-  } catch (err) {
-    console.error('保存设置失败：', err);
-    return { ok: false, error: String(err) };
-  }
+  });
 }
 
 function createWindow() {

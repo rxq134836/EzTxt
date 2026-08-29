@@ -18,6 +18,10 @@
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   /* 页面基础字号（px）—— 设置页「外观」滑杆控制，其余字号基于它推算 */
   --font-size: 13px;
+  /* 表面色（输入框/编辑框/按钮悬停底色）—— 深色主题会覆盖为暗色 */
+  --surface: rgba(255, 255, 255, 0.75);
+  --surface-strong: rgba(255, 255, 255, 0.9);
+  --hover-bg: rgba(255, 255, 255, 0.7);
 
   /* 主题色 —— 默认 amber（琥珀），保持向后兼容 */
   --bg: rgba(250, 245, 225, 0.86);
@@ -121,6 +125,40 @@
   --ink-mute: #a08850;
 }
 
+/* 主题 8：night（纯黑）—— 背景图过白时保证文字可读的兜底主题 */
+[data-theme="night"] {
+  --bg: rgba(22, 22, 26, 0.92);
+  --bg-solid: #16161A;
+  --accent: #E8B84B;
+  --accent-rgb: 232, 184, 75;
+  --ink: #F0F0F2;
+  --ink-rgb: 240, 240, 242;
+  --ink-soft: #B4B4BA;
+  --ink-mute: #76767E;
+  --card-bg: rgba(255, 255, 255, 0.07);
+  --card-bg-hover: rgba(255, 255, 255, 0.12);
+  --surface: rgba(255, 255, 255, 0.08);
+  --surface-strong: rgba(255, 255, 255, 0.14);
+  --hover-bg: rgba(255, 255, 255, 0.1);
+}
+
+/* 主题 9：paper（纯白）—— 背景图过黑时保证文字可读的兜底主题 */
+[data-theme="paper"] {
+  --bg: rgba(255, 255, 255, 0.95);
+  --bg-solid: #FFFFFF;
+  --accent: #2B5275;
+  --accent-rgb: 43, 82, 117;
+  --ink: #1A1A1A;
+  --ink-rgb: 26, 26, 26;
+  --ink-soft: #55555C;
+  --ink-mute: #9A9AA2;
+  --card-bg: rgba(0, 0, 0, 0.04);
+  --card-bg-hover: rgba(0, 0, 0, 0.07);
+  --surface: rgba(0, 0, 0, 0.04);
+  --surface-strong: rgba(0, 0, 0, 0.07);
+  --hover-bg: rgba(0, 0, 0, 0.05);
+}
+
 * { box-sizing: border-box; }
 *:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
 
@@ -199,7 +237,7 @@ html, body {
   /* Emil: color hover uses easing, transform uses ease-out for responsive feel */
   transition: background 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
 }
-.ctrl-btn:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
+.ctrl-btn:hover { background: var(--hover-bg); color: var(--ink); }
 .ctrl-btn:active { transform: scale(0.97); }
 .ctrl-btn.pin-btn.is-active { background: var(--accent); color: #fff; }
 .ctrl-btn.pin-btn.is-active:hover { background: #c49224; }
@@ -228,7 +266,7 @@ html, body {
   /* Emil: color hover uses ease, transform uses ease-out */
   transition: background 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
 }
-.tb-btn:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
+.tb-btn:hover { background: var(--hover-bg); color: var(--ink); }
 .tb-btn:active { transform: scale(0.97); }
 .tb-btn.danger:hover { background: rgba(217, 83, 79, 0.15); color: var(--danger); }
 .tb-btn.is-active { background: var(--accent-soft); color: var(--accent); }
@@ -249,13 +287,13 @@ html, body {
   border: 1px solid var(--line);
   border-radius: 6px;
   padding: 5px 10px;
-  background: rgba(255,255,255,0.7);
+  background: var(--surface);
   font-size: var(--font-size);
   color: var(--ink);
   outline: none;
   transition: border-color 0.15s, background 0.15s;
 }
-.search-input:focus { border-color: var(--accent); background: #fff; }
+.search-input:focus { border-color: var(--accent); background: var(--surface-strong); }
 .search-clear {
   width: 24px; height: 24px;
   border: none;
@@ -266,7 +304,7 @@ html, body {
   font-size: 14px;
   line-height: 1;
 }
-.search-clear:hover { background: rgba(255,255,255,0.7); }
+.search-clear:hover { background: var(--hover-bg); }
 
 /* ========= Body / list ========= */
 .body {
@@ -318,7 +356,7 @@ html, body {
 .task-card.is-selected {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--surface-strong);
 }
 .task-card.is-divider {
   background: transparent;
@@ -347,7 +385,7 @@ html, body {
   height: 18px;
   border: 1.5px solid var(--ink-mute);
   border-radius: 5px;
-  background: rgba(255,255,255,0.6);
+  background: var(--surface);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -393,7 +431,7 @@ html, body {
 }
 .card-title::placeholder { color: var(--ink-mute); font-weight: 500; }
 .card-title:focus {
-  background: rgba(255,255,255,0.8);
+  background: var(--surface-strong);
   font-weight: 600;
   white-space: normal;
   overflow: visible;
@@ -426,7 +464,7 @@ html, body {
   transform-origin: center;
 }
 .task-card:hover .card-toggle { opacity: 1; }
-.card-toggle:hover { background: rgba(255,255,255,0.7); color: var(--ink); }
+.card-toggle:hover { background: var(--hover-bg); color: var(--ink); }
 .card-toggle:active { transform: rotate(90deg) scale(0.95); }
 .card-toggle.is-expanded { transform: rotate(90deg); color: var(--accent); }
 .card-toggle svg { display: block; }
@@ -478,7 +516,7 @@ html, body {
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 8px 10px;
-  background: rgba(255,255,255,0.75);
+  background: var(--surface);
   color: var(--ink);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
     "PingFang SC", "Helvetica Neue", Arial, sans-serif;
@@ -576,7 +614,7 @@ html, body {
 .empty-tip p { margin: 0 0 12px; }
 .add-empty-btn {
   border: 1px dashed var(--accent);
-  background: rgba(255,255,255,0.6);
+  background: var(--surface);
   color: var(--accent);
   padding: 6px 14px;
   border-radius: 6px;
@@ -856,7 +894,7 @@ html, body {
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: rgba(255,255,255,0.7);
+  background: var(--surface);
   font-family: "SFMono-Regular", "Consolas", "Cascadia Code", monospace;
   font-size: calc(var(--font-size) - 1.5px);
   color: var(--ink);

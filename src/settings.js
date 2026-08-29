@@ -32,7 +32,9 @@
     { key: 'terracotta', name: '砖红', accent: '#D16647', bg: '#F5EAD4', ink: '#3d2a1a' },
     { key: 'gold',       name: '棕金', accent: '#BCA052', bg: '#F5EAD4', ink: '#4A3C2B' },
     { key: 'rose',       name: '酒红', accent: '#954B44', bg: '#F5E5E0', ink: '#3a1f1b' },
-    { key: 'sage',       name: '草绿', accent: '#A68329', bg: '#F5F0D4', ink: '#3a2f14' }
+    { key: 'sage',       name: '草绿', accent: '#A68329', bg: '#F5F0D4', ink: '#3a2f14' },
+    { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
+    { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
   ];
 
   function applyTheme(key) {
@@ -104,11 +106,14 @@
     api.saveSettings({ bgImage: null });
   }
 
+  // 透明度滑杆拖动会高频触发 input → 防抖后再保存（主进程写入队列兜底防并发损坏）
+  let bgOpacityTimer = null;
   function onBgOpacityChange() {
     if (isLoadingSettings) return;
     const v = parseFloat(bgOpacitySlider.value);
     settings.bgOpacity = v;
-    api.saveSettings({ bgOpacity: v });
+    clearTimeout(bgOpacityTimer);
+    bgOpacityTimer = setTimeout(() => api.saveSettings({ bgOpacity: v }), 150);
   }
 
   // ===== 快捷键 =====
