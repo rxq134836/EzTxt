@@ -235,6 +235,8 @@ contextBridge.exposeInMainWorld('api', {
   enterMini: () => ipcRenderer.send('enter-mini'),
   exitMini: () => ipcRenderer.send('exit-mini'),
   moveWindow: (dx, dy) => ipcRenderer.send('move-window', dx, dy),
+  // mini 态鼠标穿透（true=球外区域点击穿透到下层软件，false=正常捕获）
+  setIgnoreMouse: (ignore) => ipcRenderer.send('set-ignore-mouse', ignore),
 
   // 置顶状态变更通知
   onPinToggled: (callback) => {

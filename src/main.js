@@ -699,6 +699,16 @@ function registerIpc() {
     } catch (_) { /* 系统不支持时忽略（如 Windows 10） */ }
   });
 
+  // mini 态鼠标穿透：透明窗口矩形会拦截点击（球周围透明边缘挡住下层软件），
+  // 通过 setIgnoreMouseEvents 让球外区域点击穿透；forward 保留 mousemove，
+  // 渲染层据此在鼠标移入球时恢复捕获（球可点击）。
+  ipcMain.on('set-ignore-mouse', (_e, ignore) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.setIgnoreMouseEvents(!!ignore, ignore ? { forward: true } : undefined);
+    } catch (_) {}
+  });
+
   // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
   ipcMain.on('set-window-size', (_e, key, size) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;

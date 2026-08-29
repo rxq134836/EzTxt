@@ -77,6 +77,7 @@
   ];
   let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, shortcuts: {} };
   let isMiniMode = false;
+let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   let isLoadingSettings = false;
   let enterMiniTimer = null;
   let exitMiniTimer = null;
@@ -1269,12 +1270,18 @@
       miniBar.classList.remove('hidden');
       // 恢复用户材质（mini 态 .app 已隐藏，仅记录待展开时使用）
       document.body.dataset.material = userMaterial;
+      // 鼠标穿透：默认让球外透明区域点击穿透到下层软件；移入球时恢复捕获
+      miniMouseIgnoring = true;
+      if (api.setIgnoreMouse) api.setIgnoreMouse(true);
     }, MINI_ANIM_MS);
   }
 
   function exitMiniMode(edge) {
     isMiniMode = false;
     clearTimeout(enterMiniTimer);
+    // 退出 mini：恢复鼠标正常捕获
+    if (miniMouseIgnoring && api.setIgnoreMouse) api.setIgnoreMouse(false);
+    miniMouseIgnoring = false;
     const userMaterial = document.body.dataset.material || 'opaque';
     // 展开动画期间强制经典材质：主页以实心样式放大，避免半透明闪现。
     // 必须先切换材质再恢复 .app 显示（remove is-mini），否则 .app 恢复显示的第一帧
@@ -1372,6 +1379,25 @@
     let miniIsDragging = false;
     const CLICK_DIST_THRESHOLD = 5;
     const CLICK_TIME_THRESHOLD = 250;
+
+    // mini 态鼠标穿透：窗口透明矩形会拦截球外点击。
+    // 默认 setIgnoreMouse(true,{forward:true}) 让球外区域穿透；
+    // 借助 forward 仍会收到的 mousemove，检测鼠标是否在球范围内 → 移入恢复捕获。
+    let miniIgnoreHover = false; // 当前鼠标是否在球上
+    function updateMiniMouseIgnore(e) {
+      if (!isMiniMode) return;
+      const r = miniBar.getBoundingClientRect();
+      // 球是圆形，用中心距判断（含 hover 放大到 56px 的范围）
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const radius = r.width / 2;
+      const inside = Math.hypot(e.clientX - cx, e.clientY - cy) <= radius;
+      if (inside !== miniIgnoreHover) {
+        miniIgnoreHover = inside;
+        if (api.setIgnoreMouse) api.setIgnoreMouse(!inside); // 移入球 → 捕获；移出 → 穿透
+      }
+    }
+    document.addEventListener('mousemove', updateMiniMouseIgnore);
 
     miniBar.addEventListener('pointerdown', (e) => {
       e.preventDefault();
