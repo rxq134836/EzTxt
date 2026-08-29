@@ -156,9 +156,9 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('pin-toggled', listener);
   },
 
-  // Mini 贴边态状态变更通知
+  // Mini 贴边态状态变更通知（edge: 'left'|'right'|'top'|'bottom'|null，用于展开动画方向）
   onSnapStateChanged: (callback) => {
-    const listener = (_event, isMini) => callback(isMini);
+    const listener = (_event, isMini, edge) => callback(isMini, edge);
     ipcRenderer.on('snap-state-changed', listener);
     return () => ipcRenderer.removeListener('snap-state-changed', listener);
   }

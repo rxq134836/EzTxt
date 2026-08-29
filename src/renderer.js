@@ -42,6 +42,7 @@
   const btnSettings = $('#btnSettings');
   const miniBar = $('#miniBar');
   const miniCount = $('#miniCount');
+  const appEl = $('#app');
   const bgImageLayer = $('#bgImageLayer');
   const btnBatchDelete = $('#btnBatchDelete');
   const batchDeleteLabel = $('#batchDeleteLabel');
@@ -77,6 +78,8 @@
   let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, shortcuts: {} };
   let isMiniMode = false;
   let isLoadingSettings = false;
+  let enterMiniTimer = null;
+  let exitMiniTimer = null;
 
   // ===== 编辑器快捷键（设置面板可开关 / 改绑） =====
   // 目录：默认键位 + 显示名；settings.shortcuts 中存用户覆盖 { enabled, key, ctrl, shift, alt }
@@ -1099,17 +1102,52 @@
     miniCount.textContent = String(pending);
   }
 
+  const MINI_ANIM_MS = 190; // 与主进程窗口缩放动画（180ms）同步，略留余量
+
   function enterMiniMode() {
     isMiniMode = true;
-    document.body.classList.add('is-mini');
-    updateMiniCount();
-    miniBar.classList.remove('hidden');
+    // 1) 收起动画：内容向右上角收缩 + 淡出（与窗口缩小动画同步）
+    appEl.classList.remove('is-collapsing', 'is-collapsing-to');
+    // 强制 reflow 确保 transition 从当前状态开始
+    void appEl.offsetWidth;
+    appEl.classList.add('is-collapsing');
+    void appEl.offsetWidth;
+    appEl.classList.add('is-collapsing-to');
+    // 2) 动画结束后才真正进入 mini 态（隐藏 .app，显示 miniBar）
+    clearTimeout(enterMiniTimer);
+    enterMiniTimer = setTimeout(() => {
+      document.body.classList.add('is-mini');
+      appEl.classList.remove('is-collapsing', 'is-collapsing-to');
+      updateMiniCount();
+      miniBar.classList.remove('hidden');
+    }, MINI_ANIM_MS);
   }
 
-  function exitMiniMode() {
+  function exitMiniMode(edge) {
     isMiniMode = false;
+    // 1) 立即恢复 .app 显示、隐藏 miniBar，并准备展开动画（scale 0）
     document.body.classList.remove('is-mini');
     miniBar.classList.add('hidden');
+    clearTimeout(enterMiniTimer);
+    // 展开原点：从贴近 mini 球的角释放（边缘方向决定）
+    //   左边缘 → 左下角；右边缘 → 右下角；上边缘 → 左上角；下边缘 → 左下角
+    let origin = 'left bottom';
+    if (edge === 'right') origin = 'right bottom';
+    else if (edge === 'left') origin = 'left bottom';
+    else if (edge === 'top') origin = 'left top';
+    else if (edge === 'bottom') origin = 'left bottom';
+    appEl.style.setProperty('--expand-origin', origin);
+    appEl.classList.remove('is-expanding', 'is-expanding-to');
+    void appEl.offsetWidth;
+    appEl.classList.add('is-expanding');
+    void appEl.offsetWidth;
+    appEl.classList.add('is-expanding-to');
+    // 2) 动画结束后清理过渡类
+    clearTimeout(exitMiniTimer);
+    exitMiniTimer = setTimeout(() => {
+      appEl.classList.remove('is-expanding', 'is-expanding-to');
+      appEl.style.removeProperty('--expand-origin');
+    }, 220);
   }
 
   function initWindowControls() {
@@ -1349,10 +1387,10 @@
     initWindowControls();
     initPinState();
 
-    // mini 态事件（主进程贴边/恢复时通知）
+    // mini 态事件（主进程贴边/恢复时通知；edge 用于展开动画方向）
     if (api.onSnapStateChanged) {
-      api.onSnapStateChanged((mini) => {
-        if (mini) enterMiniMode(); else exitMiniMode();
+      api.onSnapStateChanged((mini, edge) => {
+        if (mini) enterMiniMode(); else exitMiniMode(edge);
       });
     }
 

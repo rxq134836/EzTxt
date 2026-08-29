@@ -1313,6 +1313,28 @@ body.is-mini .app {
   display: none !important;
 }
 
+/* —— mini 缩放过渡（macOS Genie 式收进/释放） ——
+   收起：内容向右上角收缩 + 淡出，与窗口缩小动画同步（180ms）；
+   展开：内容从贴近 mini 球的角放大到 1，与窗口放大动画同步（200ms） */
+.app.is-collapsing {
+  transform-origin: top right;
+  transition: transform 180ms var(--ease-in), opacity 180ms ease;
+}
+.app.is-collapsing-to {
+  transform: scale(0.02);
+  opacity: 0;
+}
+.app.is-expanding {
+  transform: scale(0.02);
+  opacity: 0;
+  transform-origin: var(--expand-origin, left bottom);
+}
+.app.is-expanding-to {
+  transform: scale(1);
+  opacity: 1;
+  transition: transform 200ms var(--ease-out), opacity 200ms ease;
+}
+
 .mini-bar {
   position: fixed;
   z-index: 9999;

@@ -405,7 +405,7 @@ function checkSnap() {
   snapEdge = pos.edge;
   snapMiniPos = { x: pos.nx, y: pos.ny };
   isSnapped = true;
-  doSnapResize(pos.nx, pos.ny);
+  doSnapResize(pos.nx, pos.ny, pos.edge);
 }
 
 /**
@@ -494,10 +494,10 @@ function animateWindowBounds(from, to, duration = 200, onDone = null) {
  * 执行缩小动作：先发 IPC 让渲染层隐藏 .app，再平滑缩窗（防 race 漏出）
  * 同时把 mini 球设为置顶(高于桌面其他窗口),退出 mini 态时恢复用户原置顶设置。
  */
-function doSnapResize(nx, ny) {
+function doSnapResize(nx, ny, edge = null) {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
   mainWindow.webContents.send('pin-toggled', true); // 通知渲染层 pin 按钮高亮
-  mainWindow.webContents.send('snap-state-changed', true);
+  mainWindow.webContents.send('snap-state-changed', true, edge || null);
   // mini 态切掉系统材质：避免亚克力磨砂铺满整个 56px 窗口矩形，球外露空白
   try { mainWindow.setBackgroundMaterial('none'); } catch (_) {}
   const from = mainWindow.getBounds();
@@ -537,7 +537,7 @@ function enterMini() {
   snapEdge = edge || null;
   snapMiniPos = { x: nx, y: ny };
   isSnapped = true;
-  doSnapResize(nx, ny);
+  doSnapResize(nx, ny, edge || null);
 }
 
 /**
@@ -593,7 +593,8 @@ function exitSnapped() {
   savedBounds = null;
   snapEdge = null;
   snapMiniPos = null;
-  mainWindow.webContents.send('snap-state-changed', false);
+  // 带 edge 通知渲染层：从贴近 mini 球的角展开（左→左下、右→右下…）
+  mainWindow.webContents.send('snap-state-changed', false, edge || null);
 
   // 平滑展开：从 mini 球位置动画到目标位置（期间保持置顶，动画结束后恢复用户置顶设置）
   animateWindowBounds(miniBounds, targetBounds, 200, () => {
