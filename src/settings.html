@@ -139,6 +139,9 @@
         <h3>快捷键设置</h3>
         <p class="settings-hint">开关控制启用；点击按键重新绑定（需包含 Ctrl/Alt 组合键），按 Backspace 取消绑定，按 Esc 退出</p>
         <div class="shortcut-list" id="shortcutList"></div>
+        <div class="shortcut-reset-row">
+          <button class="tb-btn" id="btnResetShortcuts" type="button">恢复默认快捷键</button>
+        </div>
       </section>
 
       <!-- 关闭按钮行为：独立分类 -->
@@ -193,6 +196,17 @@
       <div class="confirm-actions">
         <button class="tb-btn" id="btnCustomSizeCancel" type="button">取消</button>
         <button class="tb-btn" id="btnCustomSizeSave" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示弹窗（快捷键冲突等） -->
+  <div class="confirm-mask hidden" id="noticeMask">
+    <div class="confirm-card">
+      <h3 id="noticeTitle">提示</h3>
+      <p class="confirm-text" id="noticeText"></p>
+      <div class="confirm-actions">
+        <button class="tb-btn" id="btnNoticeOk" type="button">知道了</button>
       </div>
     </div>
   </div>

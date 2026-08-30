@@ -433,6 +433,7 @@
   const DEFAULT_SHORTCUTS = {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false, label: '加粗' },
     italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false, label: '斜体' },
+    strikethrough: { enabled: true, key: 'd', ctrl: true,  shift: false, alt: false, label: '删除线' },
     inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false, label: '行内代码' },
     codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false, label: '代码块' },
     orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false, label: '有序列表' },
@@ -461,6 +462,54 @@
 
   function saveShortcuts() {
     api.saveSettings({ shortcuts: shortcutsPayload() });
+  }
+
+  /** 恢复全部快捷键为默认值（重置开关与键位），并刷新列表与保存 */
+  function resetShortcuts() {
+    settings.shortcuts = {};
+    for (const [name, def] of Object.entries(DEFAULT_SHORTCUTS)) {
+      settings.shortcuts[name] = { ...def };
+    }
+    endShortcutCapture(); // 若正在捕获则退出
+    renderShortcutList();
+    saveShortcuts();
+  }
+
+  // ---- 提示弹窗（快捷键冲突等） ----
+  const noticeMask = $('#noticeMask');
+  const noticeTitle = $('#noticeTitle');
+  const noticeText = $('#noticeText');
+  const btnNoticeOk = $('#btnNoticeOk');
+
+  function showNotice(title, text) {
+    noticeTitle.textContent = title || '提示';
+    noticeText.textContent = text || '';
+    noticeMask.classList.remove('hidden');
+    btnNoticeOk.focus();
+  }
+
+  function closeNotice() {
+    noticeMask.classList.add('hidden');
+  }
+
+  /** 组合是否相同（比较修饰键 + 主键，忽略大小写） */
+  function sameCombo(a, b) {
+    if (!a || !b || !a.key || !b.key) return false;
+    if (!!a.ctrl !== !!b.ctrl) return false;
+    if (!!a.shift !== !!b.shift) return false;
+    if (!!a.alt !== !!b.alt) return false;
+    return String(a.key).toLowerCase() === String(b.key).toLowerCase();
+  }
+
+  /** 检测新组合是否与其他已启用快捷键冲突；返回冲突的项名，无冲突返回 null */
+  function findShortcutConflict(combo, exceptName) {
+    for (const [n, def] of Object.entries(DEFAULT_SHORTCUTS)) {
+      if (n === exceptName) continue;
+      const s = settings.shortcuts[n] || def;
+      if (s.enabled === false) continue; // 禁用的不算冲突
+      if (sameCombo(s, combo)) return n;
+    }
+    return null;
   }
 
   function renderShortcutList() {
@@ -524,8 +573,13 @@
     e.preventDefault();
     e.stopPropagation();
     const name = capturingShortcut;
+    // 中文输入法组合期间 / 修饰键本身按下（Ctrl/Shift/Alt/Win）→ 忽略，等待实际按键
+    if (e.isComposing || e.keyCode === 229) return;
+    const MODIFIER_KEYS = ['Control', 'Shift', 'Alt', 'Meta', 'OS'];
+    if (MODIFIER_KEYS.includes(e.key)) return;
     if (e.key === 'Escape') { endShortcutCapture(); return; }
-    if (e.key === 'Backspace' || e.key === 'Delete') {
+    // 仅当无修饰键时才把 Backspace/Delete 当作「清除绑定」；带修饰键则允许绑定
+    if ((e.key === 'Backspace' || e.key === 'Delete') && !(e.ctrlKey || e.metaKey || e.altKey || e.shiftKey)) {
       settings.shortcuts[name] = { enabled: false, key: '', ctrl: false, shift: false, alt: false };
       endShortcutCapture();
       saveShortcuts();
@@ -538,13 +592,22 @@
       if (badge) badge.textContent = '需要 Ctrl/Alt 组合';
       return;
     }
-    settings.shortcuts[name] = {
+    const newCombo = {
       enabled: true,
       key: e.key,
       ctrl: !!(e.ctrlKey || e.metaKey),
       shift: !!e.shiftKey,
       alt: !!e.altKey
     };
+    // 冲突检测：新组合已被其他启用的快捷键占用 → 恢复原键位并提示
+    const conflictName = findShortcutConflict(newCombo, name);
+    if (conflictName) {
+      const conflictLabel = (DEFAULT_SHORTCUTS[conflictName] || {}).label || conflictName;
+      endShortcutCapture(); // 结束捕获并恢复显示原键位（settings.shortcuts 未改动）
+      showNotice('快捷键冲突', `快捷键冲突：「${conflictLabel}」已占用 ${formatCombo(newCombo)}，已恢复原快捷键，请换一个组合。`);
+      return;
+    }
+    settings.shortcuts[name] = newCombo;
     endShortcutCapture();
     saveShortcuts();
   }
@@ -658,6 +721,15 @@
     if (e.target === confirmMask) closeBgConfirm();
   });
 
+  // 恢复默认快捷键
+  $('#btnResetShortcuts').addEventListener('click', resetShortcuts);
+
+  // 提示弹窗（快捷键冲突等）
+  btnNoticeOk.addEventListener('click', closeNotice);
+  noticeMask.addEventListener('click', (e) => {
+    if (e.target === noticeMask) closeNotice();
+  });
+
   // 自定义窗口尺寸：输入宽高
   btnCustomSizeSave.addEventListener('click', saveCustomSize);
   btnCustomSizeCancel.addEventListener('click', closeCustomSizeDialog);
@@ -672,10 +744,12 @@
     if (e.key === 'Enter') { e.preventDefault(); saveCustomSize(); }
   });
 
-  // Esc：关闭自定义尺寸弹窗 → 关闭确认框 → 退出背景管理模式
+  // Esc：关闭提示弹窗 → 自定义尺寸弹窗 → 关闭确认框 → 退出背景管理模式
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!customSizeMask.classList.contains('hidden')) {
+    if (!noticeMask.classList.contains('hidden')) {
+      closeNotice();
+    } else if (!customSizeMask.classList.contains('hidden')) {
       closeCustomSizeDialog();
     } else if (!confirmMask.classList.contains('hidden')) {
       closeBgConfirm();

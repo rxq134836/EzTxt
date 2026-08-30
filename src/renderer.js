@@ -87,6 +87,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   const DEFAULT_SHORTCUTS = {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false, label: '加粗' },
     italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false, label: '斜体' },
+    strikethrough: { enabled: true, key: 'd', ctrl: true,  shift: false, alt: false, label: '删除线' },
     inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false, label: '行内代码' },
     codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false, label: '代码块' },
     orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false, label: '有序列表' },
@@ -95,6 +96,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   const SHORTCUT_HANDLERS = {
     bold: () => document.execCommand('bold'),
     italic: () => document.execCommand('italic'),
+    strikethrough: (editor, id) => wrapSelectionWith('del', editor, id),
     inlineCode: (editor, id) => wrapSelectionWith('code', editor, id),
     codeBlock: () => document.execCommand('formatBlock', false, 'pre'),
     orderedList: () => document.execCommand('insertOrderedList'),
@@ -344,9 +346,45 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   function onEditorFocusOut(e) {
     const editor = e.target.closest && e.target.closest('.card-editor');
     if (!editor) return;
-    // 焦点移到编辑器内部（如 pre 之间）不重新高亮，避免打断
+    // 焦点移到编辑器内部（如 pre 之间）不重新渲染，避免打断
     if (editor.contains(e.relatedTarget)) return;
-    highlightCodeBlocks(editor);
+    const id = e.target.closest && e.target.closest('.task-card')
+      ? e.target.closest('.task-card').dataset.id : null;
+    // 失焦时先保存（del → ~~text~~ 等格式序列化），再按保存值重渲染，
+    // 让删除线等格式始终由 marked 生成（不依赖 Chromium 保留 <del>，失焦后仍可见）
+    const it = id ? findItem(id) : null;
+    if (it && !isMiniMode) {
+      Promise.resolve(api.htmlToMarkdown(editor.innerHTML))
+        .then((md) => {
+          if (md !== it.note) updateNote(id, md);
+          rerenderEditorContent(editor, md);
+        })
+        .catch(() => {});
+    } else {
+      highlightCodeBlocks(editor);
+    }
+  }
+
+  /** 用 Markdown 重新渲染编辑器内容（marked 输出，保持 WYSIWYG 与数据一致） */
+  function rerenderEditorContent(editor, md) {
+    if (!editor) return;
+    Promise.resolve(api.renderMarkdown(md || ''))
+      .then((html) => {
+        if (!editor.isConnected) return;
+        editor.innerHTML = html;
+        // 代码块简化：<pre><code class="language-x"> → <pre class="language-x">
+        editor.querySelectorAll('pre').forEach((pre) => {
+          const code = pre.firstElementChild;
+          if (code && code.tagName === 'CODE') {
+            const lang = (code.className.match(/language-(\S+)/) || [])[1];
+            if (lang) pre.className = 'language-' + lang;
+            pre.textContent = code.textContent;
+          }
+          applyCodeLangBadge(pre);
+        });
+        highlightCodeBlocks(editor);
+      })
+      .catch(() => {});
   }
 
   /**
@@ -372,6 +410,8 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     s = s.replace(/```[\s\S]*?```/g, ' ');
     // 行内代码 `code` → code
     s = s.replace(/`([^`]+)`/g, '$1');
+    // 删除线 ~~text~~ → text（预览纯文本显示，不暴露 Markdown 源码）
+    s = s.replace(/~~([^~]+)~~/g, '$1');
     // 粗体/斜体 **x** / *x* / __x__ / _x_
     s = s.replace(/\*\*([^*]+)\*\*/g, '$1')
          .replace(/__([^_]+)__/g, '$1')

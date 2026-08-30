@@ -101,6 +101,14 @@ turndownService.addRule('taskListCheckbox', {
   filter: (node) => node.nodeName === 'INPUT' && node.type === 'checkbox',
   replacement: (content, node) => (node.checked ? '[x]' : '[ ]')
 });
+// 删除线：<del>/<s> → ~~text~~（marked 渲染 ~~ ~~ 得到 <del>，此处反向还原，往返无损）
+turndownService.addRule('strikethrough', {
+  filter: (node) => node.nodeName === 'DEL' || node.nodeName === 'S',
+  replacement: (content) => {
+    const text = String(content).trim();
+    return '~~' + text + '~~';
+  }
+});
 turndownService.addRule('listItem', {
   filter: 'li',
   replacement: (content, node, options) => {

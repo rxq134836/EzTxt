@@ -209,6 +209,7 @@ const DEFAULT_SETTINGS = {
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
     italic:        { enabled: true, key: 'i', ctrl: true,  shift: false, alt: false },
+    strikethrough: { enabled: true, key: 'd', ctrl: true,  shift: false, alt: false },
     inlineCode:    { enabled: true, key: 'k', ctrl: true,  shift: false, alt: false },
     codeBlock:     { enabled: true, key: 'k', ctrl: true,  shift: true,  alt: false },
     orderedList:   { enabled: true, key: '[', ctrl: true,  shift: true,  alt: false },
