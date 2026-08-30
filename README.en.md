@@ -35,6 +35,7 @@ An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Mark
 - [📦 Project Structure](#-project-structure)
 - [⚙️ Data & Configuration](#️-data--configuration)
 - [🔨 Build & Release](#-build--release)
+- [🗓️ Changelog](#️-changelog)
 - [📄 License](#-license)
 
 ---
@@ -226,6 +227,38 @@ Outputs to `dist/`:
 - `EzTxt-<version>-x64-portable.exe` (portable)
 
 > On uninstall, the installer runs a custom NSIS script to terminate the running process and clean cache dirs (Cache / logs etc.), **keeping your to-do data** (the `storage` folder).
+
+---
+
+## 🗓️ Changelog
+
+### 2026-08-30
+
+**Code blocks & editing**
+- **Syntax highlighting** for code blocks (highlight.js): JavaScript / TypeScript / Bash / SQL / C# (.NET) / Java / Python / Vue and more
+- **Language badge** auto-shown at the bottom-right of each code block (from ` ```language `)
+- **Strikethrough** `~~text~~` support (lossless `marked` + `turndown` round-trip), shortcut **`Ctrl+D`**
+- Strikethrough uses high-contrast red and stays visible after losing focus (no longer relies on the browser keeping `<del>`)
+- Collapsed note preview (next to the to-do title) no longer shows `~~` source, only plain text
+- Note editor **max-height removed**: content grows freely and the card expands with it
+
+**Shortcut settings**
+- New **strikethrough shortcut** (default `Ctrl+D`), toggleable / rebindable in settings
+- New **Reset to default shortcuts** button (one-click restore)
+- New **shortcut conflict detection**: shows a notice, restores the previous binding, and does not save when a combo is taken
+- Fixed shortcut capture issues (modifier-only mis-binding / IME interference / Ctrl+Backspace treated as clear)
+
+**Window & appearance**
+- **Window ratio presets**: Default / Wide Landscape / Landscape / Narrow Portrait / Tall Portrait (dashed-box preview)
+- **Custom window size**: enter width & height in a dialog, live-synced with the main window (auto-updates while dragging)
+- Window materials: Classic (opaque) / Translucent (Acrylic reserved, temporarily hidden)
+- **Close-button behavior** setting: minimize to tray / quit app, tooltip follows the setting
+- Mini-ball **mouse passthrough**: transparent area around the ball no longer blocks clicks (reaches apps below), restores interaction on hover
+- Mini-ball expand/collapse uses macOS Genie-style scale animation; the ball always uses the classic solid theme color
+
+**System integration**
+- **Auto-update** (electron-updater + GitHub Releases): auto-check on launch, "Software Update" section in settings showing version / check / progress / one-click install
+- **Clean uninstall**: custom NSIS script terminates the process and clears caches, keeping only to-do data
 
 ---
 
