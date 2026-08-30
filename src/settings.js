@@ -18,6 +18,11 @@
   const acrylicBlurBlock = $('#acrylicBlurBlock');
   const acrylicBlurSlider = $('#acrylicBlur');
   const acrylicBlurValueEl = $('#acrylicBlurValue');
+  const appVersionEl = $('#appVersion');
+  const latestVersionEl = $('#latestVersion');
+  const btnCheckUpdate = $('#btnCheckUpdate');
+  const btnInstallUpdate = $('#btnInstallUpdate');
+  const updateStatusEl = $('#updateStatus');
   const fontSizeSliderEl = $('#fontSizeSlider');
   const fontSizeValueEl = $('#fontSizeValue');
   const btnUploadBg = $('#btnUploadBg');
@@ -688,8 +693,72 @@
     } catch (_) {}
   }
 
+  // ===== 软件更新 =====
+  async function initUpdateUI() {
+    try {
+      const v = await api.getAppVersion();
+      if (v) appVersionEl.textContent = 'v' + v;
+    } catch (_) {}
+  }
+
+  async function onCheckUpdate() {
+    updateStatusEl.textContent = '正在检查更新…';
+    btnCheckUpdate.disabled = true;
+    try {
+      const res = await api.checkUpdate(true);
+      if (res && res.ok === false) {
+        if (res.reason === 'dev-mode') updateStatusEl.textContent = '开发模式下不支持检查更新（打包后可用）';
+        else if (res.reason === 'checking') updateStatusEl.textContent = '正在检查更新…';
+        else updateStatusEl.textContent = '检查失败：' + (res.error || '未知错误');
+      }
+      // 具体状态由 onUpdateStatus 更新（available / up-to-date / downloading / downloaded / error）
+    } catch (err) {
+      updateStatusEl.textContent = '检查失败：' + (err && err.message ? err.message : String(err));
+    } finally {
+      btnCheckUpdate.disabled = false;
+    }
+  }
+
+  /** 更新状态回调（主进程广播） */
+  function onUpdateStatus(payload) {
+    if (!payload) return;
+    const s = payload.state;
+    if (s === 'checking') {
+      updateStatusEl.textContent = '正在检查更新…';
+    } else if (s === 'available') {
+      latestVersionEl.textContent = 'v' + (payload.version || '?');
+      updateStatusEl.textContent = '发现新版本 v' + (payload.version || '') + '，正在下载…';
+    } else if (s === 'downloading') {
+      updateStatusEl.textContent = '正在下载更新：' + (payload.percent || 0) + '%';
+    } else if (s === 'downloaded') {
+      latestVersionEl.textContent = 'v' + (payload.version || '?');
+      updateStatusEl.textContent = '新版本已下载，点击「立即重启安装」完成更新。';
+      btnInstallUpdate.classList.remove('hidden');
+    } else if (s === 'up-to-date') {
+      updateStatusEl.textContent = '已是最新版本。';
+    } else if (s === 'dev-mode') {
+      updateStatusEl.textContent = '开发模式下不支持检查更新（打包后可用）';
+    } else if (s === 'error') {
+      updateStatusEl.textContent = '更新失败：' + (payload.message || '未知错误');
+    } else if (s === 'listening') {
+      // 刚注册监听，无需处理
+    }
+  }
+
+  function onInstallUpdate() {
+    try {
+      api.installUpdate();
+    } catch (_) {}
+  }
+
   // ===== 事件 =====
   winClose.addEventListener('click', () => window.close());
+  btnCheckUpdate.addEventListener('click', onCheckUpdate);
+  btnInstallUpdate.addEventListener('click', onInstallUpdate);
+  if (api.onUpdateStatus) {
+    api.onUpdateStatus(onUpdateStatus);
+  }
+  initUpdateUI();
   materialOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.material) onMaterialSelect(btn.dataset.material);

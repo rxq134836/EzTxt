@@ -5,6 +5,8 @@ const path = require('path');
 const fs = require('fs/promises');
 const { existsSync, readFileSync } = require('fs');
 const crypto = require('crypto');
+// 自动更新（electron-updater）：仅打包后生效（开发模式自动跳过）
+const { autoUpdater } = require('electron-updater');
 
 let mainWindow = null;
 let isPinned = false;
@@ -710,6 +712,17 @@ function registerIpc() {
     } catch (_) {}
   });
 
+  // ===== 自动更新（GitHub Releases） =====
+  ipcMain.handle('update-check', (_e, notifyUpToDate) => checkForUpdates(!!notifyUpToDate));
+  ipcMain.handle('update-install', () => installUpdate());
+  // 当前应用版本（设置页「软件更新」显示）
+  ipcMain.handle('get-app-version', () => app.getVersion());
+  // 更新状态广播给渲染层（主窗口 / 设置窗口）
+  ipcMain.on('update-listen', (e) => {
+    // 客户端注册监听后立即回一条当前状态（无状态则忽略）
+    if (e.sender) e.sender.send('update-status', { state: 'listening' });
+  });
+
   // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
   ipcMain.on('set-window-size', (_e, key, size) => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -851,11 +864,79 @@ function registerIpc() {
   });
 }
 
+// ======= 自动更新（GitHub Releases） =======
+// electron-updater 仅在生产打包后生效；开发模式（npm start）自动跳过，避免报错。
+let updateChecking = false; // 避免重复检查
+
+/** 把更新状态广播给所有窗口（主窗口 / 设置窗口） */
+function broadcastUpdate(payload) {
+  const targets = [mainWindow, settingsWindow].filter((w) => w && !w.isDestroyed());
+  for (const w of targets) w.webContents.send('update-status', payload);
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = true; // 发现新版自动下载（下载完再询问安装）
+
+  autoUpdater.on('checking-for-update', () => {
+    broadcastUpdate({ state: 'checking' });
+  });
+  autoUpdater.on('update-available', (info) => {
+    broadcastUpdate({ state: 'available', version: info && info.version });
+  });
+  autoUpdater.on('update-not-available', () => {
+    broadcastUpdate({ state: 'up-to-date' });
+  });
+  autoUpdater.on('download-progress', (p) => {
+    broadcastUpdate({ state: 'downloading', percent: Math.round(p.percent || 0) });
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    broadcastUpdate({ state: 'downloaded', version: info && info.version });
+  });
+  autoUpdater.on('error', (err) => {
+    console.error('[updater] 错误：', err && err.message);
+    broadcastUpdate({ state: 'error', message: err && err.message });
+  });
+}
+
+/** 触发检查更新（供启动 / 设置窗口按钮调用） */
+async function checkForUpdates(notifyUpToDate) {
+  if (updateChecking) return { ok: false, reason: 'checking' };
+  if (!app.isPackaged) {
+    // 开发模式：electron-updater 需要打包后的 app-update.yml，直接跳过
+    if (notifyUpToDate) broadcastUpdate({ state: 'dev-mode' });
+    return { ok: false, reason: 'dev-mode' };
+  }
+  updateChecking = true;
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    updateChecking = false;
+    return { ok: true, updateInfo: result && result.updateInfo };
+  } catch (err) {
+    updateChecking = false;
+    console.error('[updater] 检查失败：', err && err.message);
+    return { ok: false, error: err && err.message };
+  }
+}
+
+/** 下载完成后安装并重启（先保存再退出） */
+function installUpdate() {
+  if (!app.isPackaged) return { ok: false, reason: 'dev-mode' };
+  isQuitting = true;
+  autoUpdater.quitAndInstall();
+  return { ok: true };
+}
+
 app.whenReady().then(() => {
   initStorageDir();
   registerIpc();
   createWindow();
   createTray();
+  setupAutoUpdater();
+
+  // 启动后延迟几秒再检查更新，避免拖慢首次启动
+  setTimeout(() => {
+    checkForUpdates(false);
+  }, 5000);
 
   app.on('activate', () => {
     if (!mainWindow || mainWindow.isDestroyed()) {

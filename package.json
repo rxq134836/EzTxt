@@ -1,6 +1,6 @@
 {
   "name": "eztxt",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "桌面便签笔记系统 - 基于 Electron 的本地 Markdown 便签",
   "main": "src/main.js",
   "author": "eztxt",
@@ -11,15 +11,18 @@
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable",
     "dist:nsis": "electron-builder --win nsis",
+    "dist:publish": "dotenv -e .env -- electron-builder --win nsis --publish always",
     "gen:icon": "node scripts/gen-icon.js"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "electron": "^31.3.1",
     "electron-builder": "^24.13.3",
     "png-to-ico": "^3.0.2",
     "sharp": "^0.35.4"
   },
   "dependencies": {
+    "electron-updater": "^6.8.9",
     "highlight.js": "^11.12.0",
     "marked": "^13.0.3",
     "turndown": "^7.2.4"
@@ -37,6 +40,13 @@
       "!src/logo-0829-1.png",
       "!src/logo-0829-1.ico",
       "package.json"
+    ],
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "rxq134836",
+        "repo": "EzTxt"
+      }
     ],
     "win": {
       "icon": "src/icon.ico",

@@ -1122,6 +1122,12 @@ body[data-material="acrylic"] .settings-window {
   font-size: calc(var(--font-size) - 2px);
   color: var(--ink-mute);
 }
+/* 软件更新：按钮行 */
+.update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
 
 /* —— 设置项（外观：主题 / 字体 / 背景） —— */
 .settings-block {

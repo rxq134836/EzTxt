@@ -189,6 +189,16 @@ contextBridge.exposeInMainWorld('api', {
   // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
   setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 
+  // 自动更新（GitHub Releases）
+  checkUpdate: (notifyUpToDate) => ipcRenderer.invoke('update-check', notifyUpToDate),
+  installUpdate: () => ipcRenderer.invoke('update-install'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  onUpdateStatus: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('update-status', listener);
+    return () => ipcRenderer.removeListener('update-status', listener);
+  },
+
   // 主窗口尺寸预设（设置页「外观 → 窗口比例」；key='custom' 时带 size 宽高）
   setWindowSize: (key, size) => ipcRenderer.send('set-window-size', key, size),
   // 查询主窗口当前尺寸（自定义尺寸弹窗用）

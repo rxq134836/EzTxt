@@ -24,6 +24,10 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
+# 本地环境变量（GitHub Token 等）—— 禁止提交
+.env
+.env.local
+
 # 运行时生成的本地数据（开发时）
 storage/
 
