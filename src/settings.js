@@ -47,7 +47,9 @@
     { key: 'rose',       name: '酒红', accent: '#954B44', bg: '#F5E5E0', ink: '#3a1f1b' },
     { key: 'sage',       name: '草绿', accent: '#A68329', bg: '#F5F0D4', ink: '#3a2f14' },
     { key: 'night',      name: '纯黑', accent: '#E8B84B', bg: '#16161A', ink: '#F0F0F2' },
-    { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' }
+    { key: 'paper',      name: '纯白', accent: '#2B5275', bg: '#FFFFFF', ink: '#1A1A1A' },
+    { key: 'remi',       name: '蕾米埃尔', accent: '#A788D8', bg: '#FDF0F6', ink: '#693FA8' },
+    { key: 'remi-night', name: '蕾米埃尔·夜', accent: '#F5A8C0', bg: '#2A1B3D', ink: '#F3EAFB' }
   ];
 
   function applyTheme(key) {

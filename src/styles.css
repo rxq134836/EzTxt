@@ -171,6 +171,42 @@
   --hover-bg: rgba(0, 0, 0, 0.05);
 }
 
+/* 主题 10：remi（蕾米埃尔 · 粉紫）—— 柔和粉 + 薰衣草紫，浅色梦幻风 */
+[data-theme="remi"] {
+  --bg: rgba(253, 240, 246, 0.86);
+  --bg-rgb: 253, 240, 246;
+  --bg-solid: #FDF0F6;
+  --accent: #A788D8;
+  --accent-rgb: 167, 136, 216;
+  --ink: #693FA8;
+  --ink-rgb: 105, 63, 168;
+  --ink-soft: #7B5AA8;
+  --ink-mute: #B49AC9;
+  --card-bg: rgba(255, 255, 255, 0.6);
+  --card-bg-hover: rgba(255, 255, 255, 0.85);
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-strong: rgba(255, 255, 255, 0.9);
+  --hover-bg: rgba(248, 194, 212, 0.35);
+}
+
+/* 主题 11：remi-night（蕾米埃尔 · 深紫夜）—— 深紫背景 + 粉紫高光 */
+[data-theme="remi-night"] {
+  --bg: rgba(42, 27, 61, 0.92);
+  --bg-rgb: 42, 27, 61;
+  --bg-solid: #2A1B3D;
+  --accent: #F5A8C0;
+  --accent-rgb: 245, 168, 192;
+  --ink: #F3EAFB;
+  --ink-rgb: 243, 234, 251;
+  --ink-soft: #CBB8E0;
+  --ink-mute: #8E7AA6;
+  --card-bg: rgba(255, 255, 255, 0.08);
+  --card-bg-hover: rgba(255, 255, 255, 0.13);
+  --surface: rgba(255, 255, 255, 0.08);
+  --surface-strong: rgba(255, 255, 255, 0.14);
+  --hover-bg: rgba(245, 168, 192, 0.15);
+}
+
 * { box-sizing: border-box; }
 *:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
 
@@ -744,6 +780,34 @@ body[data-material="acrylic"] .app {
 [data-theme="night"] .card-editor pre .hljs-regexp,
 [data-theme="night"] .card-editor pre .hljs-link { color: #f48fb1; }
 [data-theme="night"] .card-editor pre .hljs-meta { color: #a1887f; }
+/* 蕾米埃尔·夜（深紫）代码高亮：粉紫系配色，保证深色背景可读 */
+[data-theme="remi-night"] .card-editor pre .hljs-keyword,
+[data-theme="remi-night"] .card-editor pre .hljs-selector-tag,
+[data-theme="remi-night"] .card-editor pre .hljs-literal,
+[data-theme="remi-night"] .card-editor pre .hljs-doctag { color: #D8B4F8; }
+[data-theme="remi-night"] .card-editor pre .hljs-string,
+[data-theme="remi-night"] .card-editor pre .hljs-meta .hljs-string { color: #F5A8C0; }
+[data-theme="remi-night"] .card-editor pre .hljs-number,
+[data-theme="remi-night"] .card-editor pre .hljs-symbol { color: #C6A8F0; }
+[data-theme="remi-night"] .card-editor pre .hljs-comment,
+[data-theme="remi-night"] .card-editor pre .hljs-quote { color: #8E7AA6; }
+[data-theme="remi-night"] .card-editor pre .hljs-title,
+[data-theme="remi-night"] .card-editor pre .hljs-title.function_,
+[data-theme="remi-night"] .card-editor pre .hljs-section { color: #A8D8F0; }
+[data-theme="remi-night"] .card-editor pre .hljs-title.class_,
+[data-theme="remi-night"] .card-editor pre .hljs-type { color: #F8C2D4; }
+[data-theme="remi-night"] .card-editor pre .hljs-variable,
+[data-theme="remi-night"] .card-editor pre .hljs-template-variable,
+[data-theme="remi-night"] .card-editor pre .hljs-attr { color: #D8C8E8; }
+[data-theme="remi-night"] .card-editor pre .hljs-built_in,
+[data-theme="remi-night"] .card-editor pre .hljs-selector-attr { color: #C0D8E8; }
+[data-theme="remi-night"] .card-editor pre .hljs-params { color: #E8DCF5; }
+[data-theme="remi-night"] .card-editor pre .hljs-tag { color: #B4A0CC; }
+[data-theme="remi-night"] .card-editor pre .hljs-name { color: #D8B4F8; }
+[data-theme="remi-night"] .card-editor pre .hljs-attribute { color: #F5A8C0; }
+[data-theme="remi-night"] .card-editor pre .hljs-regexp,
+[data-theme="remi-night"] .card-editor pre .hljs-link { color: #C6A8F0; }
+[data-theme="remi-night"] .card-editor pre .hljs-meta { color: #A088C0; }
 .card-editor a { color: var(--accent); }
 /* 粘贴/内嵌的图片（截图等） */
 .card-editor img {
