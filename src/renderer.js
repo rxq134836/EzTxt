@@ -98,7 +98,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   const SHORTCUT_HANDLERS = {
     bold: () => document.execCommand('bold'),
     italic: () => document.execCommand('italic'),
-    strikethrough: (editor, id) => wrapSelectionWith('del', editor, id),
+    strikethrough: (editor, id) => toggleStrikethrough(editor, id),
     inlineCode: (editor, id) => wrapSelectionWith('code', editor, id),
     codeBlock: () => document.execCommand('formatBlock', false, 'pre'),
     orderedList: () => document.execCommand('insertOrderedList'),
@@ -837,6 +837,30 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     r.collapse(true);
     sel.removeAllRanges();
     sel.addRange(r);
+    syncEditorNote(editor, id);
+  }
+
+  /**
+   * 删除线切换（Ctrl+D）：选区起点已在 del/s/strike 内 → 解开该标签恢复纯文本；
+   * 否则用 <del> 包裹选区。不 normalize 文本节点，保证选区端点引用不变。
+   */
+  function toggleStrikethrough(editor, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    const startEl = range.startContainer.nodeType === 3
+      ? range.startContainer.parentElement
+      : range.startContainer;
+    const del = startEl && startEl.closest ? startEl.closest('del, s, strike') : null;
+    if (!del || !editor.contains(del)) {
+      wrapSelectionWith('del', editor, id);
+      return;
+    }
+    // 解开标签：子节点原位上移，删除空壳（选区所在文本节点保持原引用）
+    const parent = del.parentNode;
+    if (!parent) return;
+    while (del.firstChild) parent.insertBefore(del.firstChild, del);
+    parent.removeChild(del);
     syncEditorNote(editor, id);
   }
 
