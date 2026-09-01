@@ -62,7 +62,7 @@ An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Mark
 - The ball always uses the classic solid theme color, independent of the window material
 
 ### Personalization
-- **9 theme colors**: Amber / Deep Blue / Olive / Terracotta / Gold / Rose / Sage / Pure Black / Pure White
+- **11 theme colors**: Amber / Deep Blue / Olive / Terracotta / Gold / Rose / Sage / Pure Black / Pure White / Remilia (pink-purple) / Remilia Night (deep purple)
 - **Window materials**: Classic (opaque) / Translucent; Acrylic (frosted glass) reserved
 - **Background image**: custom background with adjustable opacity, keeping the last 10 uploads
 - **Font size**: page base font-size slider
@@ -153,6 +153,7 @@ npm run gen:icon     # regenerate app icons (src/icon.ico / icon.png)
 | `Ctrl+N` | New task |
 | `Ctrl+Shift+T` | Toggle always-on-top |
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+K` | Bold / Italic / Inline code |
+| `Ctrl+D` | Strikethrough (~~text~~, toggle on/off) |
 | `Ctrl+Shift+[` / `Ctrl+Shift+]` | Ordered / Unordered list |
 | `Ctrl+Shift+K` | Code block |
 | `` ```language `` + `Enter` | Create a code block (e.g. ` ```js `, ` ```python `) |
@@ -259,6 +260,20 @@ Outputs to `dist/`:
 **System integration**
 - **Auto-update** (electron-updater + GitHub Releases): auto-check on launch, "Software Update" section in settings showing version / check / progress / one-click install
 - **Clean uninstall**: custom NSIS script terminates the process and clears caches, keeping only to-do data
+
+### 2026-09-01
+
+**Sorting & task management**
+- **Drag to reorder**: drag handle on the left of each card (HTML5 DnD) to reorder to-dos; auto-disabled during search filter to avoid accidental drags
+- Dragging highlights the target position; release to save the new order
+
+**Editing**
+- Strikethrough supports **toggle on/off**: if the caret is inside a strikethrough, `Ctrl+D` unwraps it back to plain text; otherwise it wraps the selection
+- **Custom theme colors**: a separate window to adjust colors (background / accent / text etc.), name and save to apply to the main window immediately; supports managing & switching multiple custom themes
+
+**Themes & system**
+- New **"Remilia"** theme (soft pink + lavender purple, light) and **"Remilia Night"** theme (deep purple + pink-purple highlights, dark)
+- Mini-ball **hides the taskbar icon**: while collapsed to the mini ball, EzTxt is hidden from the taskbar (tray icon only); restored on expand
 
 ---
 
