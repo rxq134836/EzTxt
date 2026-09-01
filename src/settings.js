@@ -16,6 +16,7 @@
   const materialOptionsEl = $('#materialOptions');
   const closeActionOptionsEl = $('#closeActionOptions');
   const windowSizeOptionsEl = $('#windowSizeOptions');
+  const miniBallStyleOptionsEl = $('#miniBallStyleOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
   const acrylicBlurBlock = $('#acrylicBlurBlock');
   const acrylicBlurSlider = $('#acrylicBlur');
@@ -35,7 +36,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -231,6 +232,27 @@
     if (action === settings.closeAction) return;
     applyCloseAction(action);
     api.saveSettings({ closeAction: settings.closeAction });
+  }
+
+  // ===== mini 球风格（经典 / 动画） =====
+  function applyMiniBallStyle(style) {
+    const val = style === 'gif' ? 'gif' : 'classic';
+    settings.miniBallStyle = val;
+    renderMiniBallStyleOptions();
+  }
+
+  function renderMiniBallStyleOptions() {
+    miniBallStyleOptionsEl.querySelectorAll('.material-btn').forEach((btn) => {
+      const active = btn.dataset.mini === settings.miniBallStyle;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  function onMiniBallStyleSelect(style) {
+    if (style === settings.miniBallStyle) return;
+    applyMiniBallStyle(style);
+    api.saveSettings({ miniBallStyle: settings.miniBallStyle });
   }
 
   // ===== 主窗口尺寸预设（外观 → 窗口比例） =====
@@ -750,6 +772,7 @@
       applyMaterial(settings.material);   // 材质（含透明度/磨砂感设置显隐）
       applyAcrylicBlur(settings.acrylicBlur); // 磨砂强度（仅亚克力生效）
       applyCloseAction(settings.closeAction); // 关闭按钮行为
+      applyMiniBallStyle(settings.miniBallStyle); // mini 球风格
       applyWindowSize(settings.windowSize);   // 窗口比例预设
       bgOpacitySlider.value = String(settings.bgOpacity);
       bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
@@ -881,6 +904,10 @@
   closeActionOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.close) onCloseActionSelect(btn.dataset.close);
+  });
+  miniBallStyleOptionsEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.material-btn');
+    if (btn && btn.dataset.mini) onMiniBallStyleSelect(btn.dataset.mini);
   });
   windowSizeOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.window-size-btn');

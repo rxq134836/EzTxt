@@ -1745,9 +1745,26 @@ body.is-mini .app {
   /* 常态微缩 6%：mini 窗口与球体同尺寸(56px)，hover 放大到 100% 恰好充满窗口，
      既保留放大反馈，又不会被窗口边缘裁剪 */
   transform: scale(0.94);
+  overflow: hidden; /* GIF 背景圆形裁剪 */
 }
-.mini-bar:hover { transform: scale(1); box-shadow: 0 6px 16px rgba(var(--accent-rgb), 0.35); }
-.mini-bar:active { transform: scale(0.9); }
+/* 动画球模式（蕾米埃尔 GIF）：纯动画背景，隐藏文字，点击弹气泡 */
+.mini-bar.is-gif {
+  border: none;
+  border-radius: 0;            /* 正方形：不裁剪 GIF 画面（圆形会裁掉四角） */
+  background-color: transparent; /* 去除基础规则的主题色底，GIF 透明区域露出纯透明 */
+  background-image: none;        /* 背景图由 JS 设置（轮换 GIF） */
+  background-size: cover;
+  background-position: center;
+  box-shadow: none;              /* 去除半透明黑色光晕（GIF 本身透明，无需阴影） */
+}
+.mini-bar.is-gif .mini-dot,
+.mini-bar.is-gif .mini-count,
+.mini-bar.is-gif .mini-label {
+  display: none;
+}
+/* 动画球 hover 不放大（避免 GIF 变形/闪烁） */
+.mini-bar.is-gif:hover { transform: scale(0.94); box-shadow: none; }
+.mini-bar.is-gif:active { transform: scale(0.9); }
 .mini-dot {
   width: 6px;
   height: 6px;

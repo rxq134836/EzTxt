@@ -77,7 +77,7 @@
     { key: 'remi',       name: '蕾米埃尔', accent: '#A788D8', bg: '#FDF0F6', ink: '#693FA8' },
     { key: 'remi-night', name: '蕾米埃尔·夜', accent: '#F5A8C0', bg: '#2A1B3D', ink: '#F3EAFB' }
   ];
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', shortcuts: {} };
   let isMiniMode = false;
 let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   let isLoadingSettings = false;
@@ -1540,6 +1540,35 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     miniCount.textContent = String(pending);
   }
 
+  // ===== mini 球动画模式（蕾米埃尔 GIF 轮换 + 待办提示） =====
+  const MINI_GIFS = ['remi-1.gif', 'remi-2.gif', 'remi-3.gif', 'remi-4.gif'];
+  let miniGifIndex = 0;        // 当前轮换到的 GIF
+
+  /** 当前是否启用 GIF 动画球（设置开启 + 主题为蕾米埃尔系） */
+  function isMiniGifActive() {
+    if (settings.miniBallStyle !== 'gif') return false;
+    const theme = settings.theme;
+    return theme === 'remi' || theme === 'remi-night';
+  }
+
+  /** 进入 mini 时应用 GIF 背景（轮换取下一个） */
+  function applyMiniGif() {
+    if (!isMiniGifActive()) {
+      miniBar.classList.remove('is-gif');
+      miniBar.style.backgroundImage = '';
+      return;
+    }
+    const gif = MINI_GIFS[miniGifIndex % MINI_GIFS.length];
+    miniGifIndex = (miniGifIndex + 1) % MINI_GIFS.length;
+    miniBar.classList.add('is-gif');
+    miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+  }
+
+  /** GIF 资源路径（打包后相对 app 目录；开发时相对项目根） */
+  function miniGifUrl(name) {
+    return './mini-gifs/' + name;
+  }
+
   const MINI_ANIM_MS = 190; // 与主进程窗口缩放动画（180ms）同步，略留余量
 
   function enterMiniMode() {
@@ -1561,6 +1590,8 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       appEl.classList.remove('is-collapsing', 'is-collapsing-to');
       updateMiniCount();
       miniBar.classList.remove('hidden');
+      // 应用 GIF 动画球背景（若开启且主题为蕾米埃尔系），否则经典样式
+      applyMiniGif();
       // 恢复用户材质（mini 态 .app 已隐藏，仅记录待展开时使用）
       document.body.dataset.material = userMaterial;
       // 鼠标穿透：默认让球外透明区域点击穿透到下层软件；移入球时恢复捕获
@@ -1740,6 +1771,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       miniIsDragging = false;
 
       if (wasClick && isMiniMode) {
+        // 单击展开主页面（双击无特殊效果，直接展开）
         api.exitMini();
       }
     });
@@ -1748,11 +1780,6 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       miniBar.classList.remove('is-dragging');
       miniDownStart = null;
       miniIsDragging = false;
-    });
-
-    // 双击直接退出 mini 态
-    miniBar.addEventListener('dblclick', () => {
-      if (isMiniMode) api.exitMini();
     });
   }
 

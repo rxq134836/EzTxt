@@ -211,6 +211,7 @@ const DEFAULT_SETTINGS = {
   closeAction: 'tray',    // 主窗口关闭按钮行为：tray（缩小到托盘）/ quit（退出软件）
   windowSize: 'default',  // 主窗口尺寸预设（见 WINDOW_SIZES；'custom' 用 customWindowSize）
   customWindowSize: { width: 560, height: 620 }, // 自定义窗口尺寸（窗口比例 → 自定义）
+  miniBallStyle: 'classic', // mini 球风格：classic（经典圆球）/ gif（蕾米埃尔动画）
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },

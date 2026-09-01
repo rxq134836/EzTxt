@@ -179,6 +179,8 @@ easy-txt/
 │   ├── settings.html        # Separate settings window page
 │   ├── settings.js          # Settings window logic
 │   ├── styles.css           # Global styles (themes/materials/editor/scrollbars etc.)
+│   ├── custom-theme.*       # Custom theme color window (html/js)
+│   ├── mini-gifs/           # Mini-ball animated GIFs (remi-1~4.gif, Remilia themes)
 │   ├── icon.ico / icon.png  # App icons
 │   └── logo-0829-1.*        # Original logo assets (not packaged)
 ├── scripts/
@@ -274,6 +276,10 @@ Outputs to `dist/`:
 **Themes & system**
 - New **"Remilia"** theme (soft pink + lavender purple, light) and **"Remilia Night"** theme (deep purple + pink-purple highlights, dark)
 - Mini-ball **hides the taskbar icon**: while collapsed to the mini ball, EzTxt is hidden from the taskbar (tray icon only); restored on expand
+
+**Mini-ball upgrades**
+- New mini-ball **animated style**: uses 4 uncompressed animated GIFs in rotation (only on Remilia / Remilia Night themes); in animated mode the numeric badge is hidden and the ball is a pure GIF; the animated ball is **square** (no image cropping)
+- Mini-ball **single-click** expands the main window; dragging moves the ball
 
 ---
 
