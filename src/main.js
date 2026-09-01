@@ -13,6 +13,7 @@ let isPinned = false;
 let tray = null;
 let isQuitting = false;
 let settingsWindow = null;
+let customThemeWindow = null;
 // 主窗口 CSS 视口尺寸（渲染层上报 innerWidth/innerHeight，供设置窗口同步）
 let lastMainWindowSize = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
@@ -197,7 +198,10 @@ function enqueueWrite(fn) {
 }
 
 const DEFAULT_SETTINGS = {
-  theme: 'blue',          // 主题 key
+  theme: 'blue',          // 主题 key（'custom' = 自定义主题之一，配合 customThemeId）
+  customThemeId: null,    // 激活的自定义主题 id（theme==='custom' 时有效）
+  customTheme: null,      // 【旧字段】单个自定义主题，启动时自动迁移进 customThemes
+  customThemes: [],       // 自定义主题列表（最多 5 个）{id, name, accent, bg, ink, dark}
   material: 'opaque',      // 窗口材质：opaque（经典不透明）/ translucent（半透明）/ acrylic（亚克力磨砂）
   acrylicBlur: 40,         // 亚克力磨砂强度（backdrop-filter 模糊半径 px，0~60）
   bgImage: null,          // 当前背景图 dataURL（渲染层压缩后存入）
@@ -250,11 +254,29 @@ async function loadSettings() {
     }
     const raw = (await fs.readFile(settingsFile(), 'utf8')).replace(/^\uFEFF/, '');
     const data = JSON.parse(raw);
-    return mergeSettings(DEFAULT_SETTINGS, data);
+    const merged = mergeSettings(DEFAULT_SETTINGS, data);
+    return migrateCustomTheme(merged);
   } catch (err) {
     console.error('加载设置失败：', err);
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+/** 旧版单自定义主题（theme==='custom' + customTheme）迁移为 customThemes 列表第一项 */
+function migrateCustomTheme(s) {
+  const hasList = Array.isArray(s.customThemes) && s.customThemes.length > 0;
+  if (!hasList && s.customTheme && typeof s.customTheme === 'object') {
+    const id = 'ct-' + crypto.randomBytes(4).toString('hex');
+    s.customThemes = [{ id, name: '自定义 1', ...s.customTheme }];
+    s.customThemeId = id;
+  }
+  if (!Array.isArray(s.customThemes)) s.customThemes = [];
+  // 激活的自定义主题被删/不存在时回退默认主题
+  if (s.theme === 'custom' && !s.customThemes.find((t) => t.id === s.customThemeId)) {
+    s.theme = 'blue';
+    s.customThemeId = null;
+  }
+  return s;
 }
 
 function saveSettings(_, patch) {
@@ -264,9 +286,10 @@ function saveSettings(_, patch) {
       const current = await loadSettings();
       const merged = mergeSettings(current, patch);
       await atomicWrite(settingsFile(), JSON.stringify(merged, null, 2), 'utf8');
-      // 通知主窗口重新加载设置（主题/字号/快捷键即时生效）
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('settings-changed');
+      // 通知所有窗口重新加载设置（主题/字号/快捷键即时生效；自定义主题保存后设置窗口同步刷新）
+      const { BrowserWindow } = require('electron');
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('settings-changed');
       }
       return { ok: true, settings: merged };
     } catch (err) {
@@ -348,6 +371,59 @@ function applyPinState() {
  * 独立的设置窗口（可拖动、可缩放，与主窗口分离）。
  * 单例：已打开则聚焦复用。
  */
+// 打开自定义主题编辑器窗口（左 demo 实时预览 / 右 3 色 + 明暗 + 名称面板）
+// editId 为空 = 新建；传 id = 编辑已有自定义主题
+function openCustomThemeWindow(editId = null) {
+  if (customThemeWindow && !customThemeWindow.isDestroyed()) {
+    // 单例复用：切换编辑目标时重载页面（携带 query）
+    customThemeWindow.loadFile(path.join(__dirname, 'custom-theme.html'), {
+      query: editId ? { id: editId } : {}
+    });
+    customThemeWindow.show();
+    customThemeWindow.focus();
+    return;
+  }
+  const winOptions = {
+    width: 660,
+    height: 540,
+    minWidth: 580,
+    minHeight: 470,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#00000000',
+    show: false,
+    title: 'EzTxt 自定义主题',
+    icon: ICON_PATH_PNG,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false
+    }
+  };
+  customThemeWindow = new BrowserWindow(winOptions);
+  customThemeWindow.loadFile(path.join(__dirname, 'custom-theme.html'), {
+    query: editId ? { id: editId } : {}
+  });
+  customThemeWindow.once('ready-to-show', () => {
+    customThemeWindow.show();
+  });
+  customThemeWindow.on('closed', () => {
+    customThemeWindow = null;
+  });
+  customThemeWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+}
+
 function openSettingsWindow() {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.show();
@@ -694,6 +770,7 @@ function registerIpc() {
 
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());
+  ipcMain.on('open-custom-theme', (_e, editId) => openCustomThemeWindow(editId || null));
 
   // 窗口材质（经典 / 半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
   // 透明窗口上 DWM 不渲染 backdrop material（Electron #48031），以 CSS 磨砂效果为主

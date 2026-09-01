@@ -11,6 +11,8 @@
   const $ = (sel) => document.querySelector(sel);
 
   const themeSwatches = $('#themeSwatches');
+  const customSwatches = $('#customSwatches');
+  const customSwatchHint = $('#customSwatchHint');
   const materialOptionsEl = $('#materialOptions');
   const closeActionOptionsEl = $('#closeActionOptions');
   const windowSizeOptionsEl = $('#windowSizeOptions');
@@ -52,11 +54,28 @@
     { key: 'remi-night', name: '蕾米埃尔·夜', accent: '#F5A8C0', bg: '#2A1B3D', ink: '#F3EAFB' }
   ];
 
+  const MAX_CUSTOM_THEMES = 5;
+
   function applyTheme(key) {
-    if (!THEMES.find((t) => t.key === key)) key = 'amber';
+    if (key !== 'custom' && !THEMES.find((t) => t.key === key)) key = 'amber';
     document.body.dataset.theme = key;
     settings.theme = key;
+    // custom 主题：按 customThemeId 从列表取项注入派生变量；预置主题：清除注入恢复预置值
+    if (key === 'custom') {
+      const item = (settings.customThemes || []).find((t) => t.id === settings.customThemeId);
+      if (item) {
+        api.applyCustomThemeVars(item);
+      } else {
+        key = 'amber';
+        document.body.dataset.theme = key;
+        settings.theme = key;
+        api.clearCustomThemeVars();
+      }
+    } else {
+      api.clearCustomThemeVars();
+    }
     renderThemeSwatches();
+    renderCustomSwatches();
     api.saveSettings({ theme: key });
   }
 
@@ -72,6 +91,85 @@
       btn.addEventListener('click', () => applyTheme(t.key));
       themeSwatches.appendChild(btn);
     }
+  }
+
+  // ===== 自定义主题区（独立一行，最多 5 个：点击应用 / 双击编辑 / 角标删除 / ＋新建） =====
+  function renderCustomSwatches() {
+    customSwatches.innerHTML = '';
+    const list = settings.customThemes || [];
+    const isActiveCustom = settings.theme === 'custom';
+    for (const t of list) {
+      const wrap = document.createElement('div');
+      wrap.className = 'custom-swatch-wrap';
+      const btn = document.createElement('button');
+      btn.className = 'theme-swatch' + (isActiveCustom && settings.customThemeId === t.id ? ' is-active' : '');
+      btn.type = 'button';
+      btn.title = `${t.name}（点击应用，双击编辑）`;
+      btn.style.background = t.bg;
+      btn.innerHTML = `<span class="swatch-accent" style="background:${t.accent}"></span>`;
+      btn.addEventListener('click', () => activateCustomTheme(t.id));
+      btn.addEventListener('dblclick', () => api.openCustomTheme(t.id));
+      // 删除角标
+      const del = document.createElement('button');
+      del.className = 'swatch-del';
+      del.type = 'button';
+      del.title = `删除「${t.name}」`;
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteCustomTheme(t.id);
+      });
+      wrap.appendChild(btn);
+      wrap.appendChild(del);
+      customSwatches.appendChild(wrap);
+    }
+    // 新建入口（未满 5 个时）：虚线圆「＋」
+    if (list.length < MAX_CUSTOM_THEMES) {
+      const addBtn = document.createElement('button');
+      addBtn.className = 'theme-swatch theme-swatch--add';
+      addBtn.type = 'button';
+      addBtn.title = '新建自定义主题';
+      addBtn.innerHTML = `<span class="swatch-add">＋</span>`;
+      addBtn.addEventListener('click', () => api.openCustomTheme(null));
+      customSwatches.appendChild(addBtn);
+    }
+    customSwatchHint.textContent = list.length >= MAX_CUSTOM_THEMES
+      ? '最多可保存 5 个自定义主题'
+      : '';
+  }
+
+  async function activateCustomTheme(id) {
+    const item = (settings.customThemes || []).find((t) => t.id === id);
+    if (!item) return;
+    document.body.dataset.theme = 'custom';
+    settings.theme = 'custom';
+    settings.customThemeId = id;
+    api.applyCustomThemeVars(item);
+    renderThemeSwatches();
+    renderCustomSwatches();
+    await api.saveSettings({ theme: 'custom', customThemeId: id });
+  }
+
+  async function deleteCustomTheme(id) {
+    const item = (settings.customThemes || []).find((t) => t.id === id);
+    if (!item) return;
+    // 复用软件内确认弹窗（window.confirm 在无边框透明窗口上返回值不可靠）
+    openConfirm(`确定删除自定义主题「${item.name}」吗？删除后无法恢复。`, async () => {
+      const list = (settings.customThemes || []).filter((t) => t.id !== id);
+      const patch = { customThemes: list };
+      if (settings.theme === 'custom' && settings.customThemeId === id) {
+        patch.theme = 'blue'; // 删除激活主题 → 回退深蓝预置
+        patch.customThemeId = null;
+        settings.theme = 'blue';
+        settings.customThemeId = null;
+        document.body.dataset.theme = 'blue';
+        api.clearCustomThemeVars();
+      }
+      settings.customThemes = list;
+      renderThemeSwatches();
+      renderCustomSwatches();
+      await api.saveSettings(patch);
+    });
   }
 
   // ===== 材质（经典 / 半透明 / 亚克力） =====
@@ -403,9 +501,7 @@
   function openBgDeleteConfirm() {
     const n = bgSelected.size;
     if (n === 0) return;
-    confirmText.textContent = `确定要删除选中的 ${n} 张背景图吗？删除后无法恢复。`;
-    confirmMask.classList.remove('hidden');
-    btnConfirmOk.focus();
+    openConfirm(`确定要删除选中的 ${n} 张背景图吗？删除后无法恢复。`, doBgDelete);
   }
 
   function closeBgConfirm() {
@@ -630,6 +726,21 @@
         settings.shortcuts[name] = { ...def, ...(settings.shortcuts[name] || {}) };
       }
       document.body.dataset.theme = settings.theme;
+      settings.customThemes = Array.isArray(settings.customThemes) ? settings.customThemes : [];
+      // custom 主题：按 id 注入派生变量；预置主题：清除内联覆盖
+      if (settings.theme === 'custom') {
+        const item = settings.customThemes.find((t) => t.id === settings.customThemeId);
+        if (item) {
+          api.applyCustomThemeVars(item);
+        } else {
+          settings.theme = 'blue';
+          settings.customThemeId = null;
+          document.body.dataset.theme = 'blue';
+          api.clearCustomThemeVars();
+        }
+      } else {
+        api.clearCustomThemeVars();
+      }
       applyFontSize(settings.fontSize);
       // 亚克力已隐藏：旧配置残留 acrylic 时回退为半透明并持久化，避免下次仍生效
       if (HIDDEN_MATERIALS.includes(settings.material)) {
@@ -647,10 +758,12 @@
         settings.bgHistory = settings.bgImage ? [settings.bgImage] : [];
       }
       renderThemeSwatches();
+      renderCustomSwatches();
       renderShortcutList();
       renderBgHistory();
     } catch (_) {
       renderThemeSwatches();
+      renderCustomSwatches();
       renderShortcutList();
     } finally {
       isLoadingSettings = false;
@@ -786,10 +899,23 @@
   btnManageBg.addEventListener('click', toggleBgManageMode);
   btnBgCancel.addEventListener('click', toggleBgManageMode);
   btnDeleteBg.addEventListener('click', openBgDeleteConfirm);
-  btnConfirmOk.addEventListener('click', doBgDelete);
   btnConfirmCancel.addEventListener('click', closeBgConfirm);
   confirmMask.addEventListener('click', (e) => {
     if (e.target === confirmMask) closeBgConfirm();
+  });
+
+  // ===== 通用确认弹窗（复用 confirmMask：背景图删除 / 自定义主题删除等共用） =====
+  let pendingConfirmOk = null;
+  function openConfirm(text, onOk) {
+    confirmText.textContent = text;
+    pendingConfirmOk = onOk || null;
+    confirmMask.classList.remove('hidden');
+    btnConfirmOk.focus();
+  }
+  btnConfirmOk.addEventListener('click', () => {
+    const fn = pendingConfirmOk;
+    closeBgConfirm();
+    if (fn) fn();
   });
 
   // 恢复默认快捷键
@@ -836,4 +962,8 @@
 
   loadSettingsState();
   refreshStorageInfo();
+  // 编辑器窗口保存自定义主题后，主进程广播 settings-changed → 刷新主题显示与应用
+  api.onSettingsChanged(() => {
+    if (!isLoadingSettings) loadSettingsState();
+  });
 })();

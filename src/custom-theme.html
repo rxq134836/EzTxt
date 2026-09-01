@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self' data:" />
+  <title>EzTxt 自定义主题</title>
+  <style>
+    :root {
+      /* 自定义主题变量兜底值（JS 实时覆盖） */
+      --accent: #e0a82e;
+      --accent-rgb: 224, 168, 46;
+      --bg-solid: #FAF5E1;
+      --bg-rgb: 250, 245, 225;
+      --ink: #4a3f24;
+      --ink-rgb: 74, 63, 36;
+      --ink-soft: #7a6e4f;
+      --ink-mute: #b3a479;
+      --line: rgba(74, 63, 36, 0.12);
+      --line-soft: rgba(74, 63, 36, 0.06);
+      --accent-soft: rgba(224, 168, 46, 0.18);
+      --surface: rgba(255, 255, 255, 0.75);
+      --surface-strong: rgba(255, 255, 255, 0.9);
+      /* 编辑器窗口自身固定用色（不随主题变） */
+      --panel-bg: #f5f2ea;
+      --panel-ink: #3d3a33;
+      --panel-ink-soft: #7d786c;
+      --panel-line: rgba(0, 0, 0, 0.1);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: transparent;
+      font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+      font-size: 13px;
+      color: var(--panel-ink);
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .window {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 16px);
+      margin: 8px;
+      background: var(--panel-bg);
+      border: 1px solid var(--panel-line);
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+      overflow: hidden;
+    }
+
+    /* ===== 标题栏 ===== */
+    .titlebar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 40px;
+      padding: 0 6px 0 16px;
+      border-bottom: 1px solid var(--panel-line);
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    .titlebar .title { font-weight: 600; font-size: 13px; }
+    .titlebar .hint { font-size: 11px; color: var(--panel-ink-soft); margin-left: 10px; }
+    .win-controls { display: flex; gap: 2px; -webkit-app-region: no-drag; }
+    .win-controls button {
+      width: 34px; height: 28px;
+      border: none; background: transparent;
+      border-radius: 6px; cursor: pointer;
+      font-size: 13px; color: var(--panel-ink-soft);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .win-controls button:hover { background: rgba(0, 0, 0, 0.08); color: var(--panel-ink); }
+
+    /* ===== 主体：左 demo / 右面板 ===== */
+    .main { display: flex; flex: 1; min-height: 0; }
+
+    /* ----- 左：demo 预览区 ----- */
+    .demo-stage {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      background:
+        repeating-conic-gradient(rgba(0,0,0,0.045) 0% 25%, transparent 0% 50%)
+        0 0 / 18px 18px;
+    }
+    /* demo 容器：模拟主窗口，变量由 JS 实时注入 */
+    .demo-app {
+      width: 100%;
+      max-width: 380px;
+      height: 100%;
+      max-height: 420px;
+      background: var(--bg-solid);
+      border-radius: 12px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      color: var(--ink);
+    }
+    .demo-titlebar {
+      display: flex; align-items: center; justify-content: space-between;
+      height: 34px; padding: 0 12px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 11px; font-weight: 600;
+      flex-shrink: 0;
+    }
+    .demo-titlebar .dots { display: flex; gap: 5px; }
+    .demo-titlebar .dots i {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--line);
+    }
+    .demo-toolbar {
+      display: flex; gap: 4px; padding: 8px 12px 4px;
+      flex-wrap: wrap; flex-shrink: 0;
+    }
+    .demo-toolbar span {
+      font-size: 11px; padding: 3px 8px;
+      border-radius: 6px; color: var(--ink-soft);
+      border: 1px solid transparent;
+    }
+    .demo-toolbar span.on {
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-color: rgba(var(--accent-rgb), 0.35);
+      font-weight: 600;
+    }
+    .demo-list { flex: 1; overflow: hidden; padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; }
+    .demo-card {
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 12px;
+    }
+    .demo-card .row { display: flex; align-items: center; gap: 8px; }
+    .demo-card .check {
+      width: 14px; height: 14px; flex-shrink: 0;
+      border: 1.5px solid var(--ink-mute);
+      border-radius: 4px;
+    }
+    .demo-card .check.done {
+      background: var(--accent);
+      border-color: var(--accent);
+      position: relative;
+    }
+    .demo-card .check.done::after {
+      content: '';
+      position: absolute; left: 3.5px; top: 0.5px;
+      width: 4px; height: 8px;
+      border: solid #fff; border-width: 0 1.5px 1.5px 0;
+      transform: rotate(45deg);
+    }
+    .demo-card .t { font-weight: 600; }
+    .demo-card .t.done { text-decoration: line-through; color: var(--ink-mute); font-weight: 500; }
+    .demo-card .meta { font-size: 10px; color: var(--ink-mute); margin-top: 3px; }
+    .demo-card .note {
+      margin-top: 7px; padding: 7px 9px;
+      background: rgba(var(--ink-rgb), 0.05);
+      border-left: 3px solid rgba(var(--accent-rgb), 0.6);
+      border-radius: 6px;
+      font-size: 11px; line-height: 1.55; color: var(--ink-soft);
+    }
+    .demo-card .note b { color: var(--ink); }
+    .demo-card .note code {
+      font-family: Consolas, monospace; font-size: 10px;
+      background: rgba(var(--accent-rgb), 0.12);
+      color: var(--accent);
+      padding: 1px 4px; border-radius: 4px;
+    }
+    .demo-card .note del { color: var(--ink-mute); }
+    .demo-card .note a { color: var(--accent); text-decoration: none; }
+    .demo-progress {
+      flex-shrink: 0;
+      height: 5px; margin: 0 12px 4px;
+      border-radius: 3px;
+      background: var(--line-soft);
+      overflow: hidden;
+    }
+    .demo-progress i {
+      display: block; height: 100%; width: 40%;
+      background: var(--accent);
+      border-radius: 3px;
+    }
+    .demo-statusbar {
+      flex-shrink: 0;
+      display: flex; justify-content: space-between;
+      padding: 6px 12px 8px;
+      font-size: 10px; color: var(--ink-mute);
+    }
+    /* mini 球（demo 右下角悬浮） */
+    .demo-stage { position: relative; }
+    .demo-mini {
+      position: absolute; right: 26px; bottom: 26px;
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      background: var(--bg-solid);
+      border: 2px solid rgba(var(--accent-rgb), 0.8);
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700; color: var(--accent);
+    }
+
+    /* ----- 右：颜色面板 ----- */
+    .panel {
+      width: 240px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 14px;
+      gap: 10px;
+      border-left: 1px solid var(--panel-line);
+      overflow-y: auto;
+    }
+    .panel h3 {
+      margin: 0; font-size: 11px; font-weight: 600;
+      color: var(--panel-ink-soft);
+      text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    /* 名称输入（必填） */
+    .name-row { display: flex; flex-direction: column; gap: 4px; }
+    .name-row input[type="text"] {
+      height: 32px; padding: 0 10px;
+      border: 1px solid var(--panel-line);
+      border-radius: 7px;
+      font-size: 13px;
+      background: #fff; color: var(--panel-ink);
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .name-row input[type="text"]:focus {
+      border-color: #4c6b8a;
+      box-shadow: 0 0 0 2px rgba(76, 107, 138, 0.15);
+    }
+    .name-row input.error {
+      border-color: #d9534f;
+      box-shadow: 0 0 0 2px rgba(217, 83, 79, 0.15);
+    }
+    .name-error {
+      font-size: 11px; color: #d9534f;
+      display: none;
+    }
+    .name-error.show { display: block; }
+    .color-row {
+      display: flex; align-items: center; gap: 8px;
+    }
+    .color-row .cl { width: 46px; font-size: 12px; flex-shrink: 0; }
+    .color-row input[type="color"] {
+      width: 42px; height: 30px;
+      border: 1px solid var(--panel-line);
+      border-radius: 6px; padding: 2px;
+      background: #fff; cursor: pointer;
+      flex-shrink: 0;
+    }
+    .color-row input[type="text"] {
+      flex: 1; min-width: 0;
+      height: 28px; padding: 0 8px;
+      border: 1px solid var(--panel-line);
+      border-radius: 6px;
+      font-family: Consolas, monospace; font-size: 12px;
+      background: #fff; color: var(--panel-ink);
+    }
+    .dark-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 10px;
+      background: rgba(0, 0, 0, 0.04);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+    /* 明暗开关 */
+    .switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; cursor: pointer; }
+    .switch input { display: none; }
+    .switch .track {
+      position: absolute; inset: 0;
+      background: #c9c4b8; border-radius: 10px;
+      transition: background 0.18s ease;
+    }
+    .switch .track::after {
+      content: '';
+      position: absolute; left: 2px; top: 2px;
+      width: 16px; height: 16px;
+      background: #fff; border-radius: 50%;
+      transition: transform 0.18s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+    .switch input:checked + .track { background: #4c8a58; }
+    .switch input:checked + .track::after { transform: translateX(16px); }
+
+    /* 预设 */
+    .presets { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+    .presets button {
+      height: 30px; border-radius: 7px; cursor: pointer;
+      border: 1px solid var(--panel-line);
+      padding: 0;
+      transition: transform 0.12s ease;
+    }
+    .presets button:hover { transform: scale(1.08); }
+
+    .panel .spacer { flex: 1; }
+    .btn-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1; height: 34px;
+      border-radius: 8px; cursor: pointer;
+      font-size: 12px; font-weight: 600;
+      border: 1px solid var(--panel-line);
+      background: #fff; color: var(--panel-ink);
+    }
+    .btn:hover { background: #f2efe7; }
+    .btn.primary {
+      background: #4c6b8a; border-color: #4c6b8a; color: #fff;
+    }
+    .btn.primary:hover { background: #3e5a76; }
+    .btn.danger-ghost { color: #a05555; }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <!-- 标题栏 -->
+    <div class="titlebar">
+      <div style="display:flex;align-items:baseline;">
+        <span class="title">自定义主题</span>
+        <span class="hint">调整颜色后点「保存」应用到主窗口</span>
+      </div>
+      <div class="win-controls">
+        <button id="closeBtn" title="关闭">✕</button>
+      </div>
+    </div>
+
+    <div class="main">
+      <!-- 左：demo 预览 -->
+      <div class="demo-stage">
+        <div class="demo-app" id="demoApp">
+          <div class="demo-titlebar">
+            <span>所有待办 · 5 项 · 已完成 2</span>
+            <span class="dots"><i></i><i></i><i></i></span>
+          </div>
+          <div class="demo-toolbar">
+            <span class="on">＋ 新建</span><span>⌖ 置顶</span><span>✓ 查找</span><span>⋯ 更多</span>
+          </div>
+          <div class="demo-list">
+            <div class="demo-card">
+              <div class="row"><span class="check done"></span><span class="t done">写周报并发送</span></div>
+              <div class="meta">今天 09:30 · 已完成</div>
+            </div>
+            <div class="demo-card">
+              <div class="row"><span class="check"></span><span class="t">整理项目需求文档</span></div>
+              <div class="meta">明天 18:00</div>
+              <div class="note">
+                重点：<b>支付模块重构</b>，参考 <code>docs/spec.md</code>，
+                已完成部分 <del>接口调研</del>，详情见 <a href="#">需求列表</a>
+              </div>
+            </div>
+          </div>
+          <div class="demo-progress"><i></i></div>
+          <div class="demo-statusbar"><span>● 已保存</span><span>Ctrl+B 加粗</span></div>
+        </div>
+        <!-- mini 球预览 -->
+        <div class="demo-mini" id="demoMini">3</div>
+      </div>
+
+      <!-- 右：颜色面板 -->
+      <div class="panel">
+        <div class="name-row">
+          <h3>主题名称（必填）</h3>
+          <input type="text" id="themeName" placeholder="例如：我的粉色" maxlength="12" spellcheck="false" />
+          <span class="name-error" id="nameError">请先填写主题名称再保存</span>
+        </div>
+
+        <h3>主题颜色</h3>
+        <div class="color-row">
+          <span class="cl">强调色</span>
+          <input type="color" id="accentColor" value="#e0a82e" />
+          <input type="text" id="accentHex" value="#e0a82e" maxlength="7" spellcheck="false" />
+        </div>
+        <div class="color-row">
+          <span class="cl">背景色</span>
+          <input type="color" id="bgColor" value="#faf5e1" />
+          <input type="text" id="bgHex" value="#FAF5E1" maxlength="7" spellcheck="false" />
+        </div>
+        <div class="color-row">
+          <span class="cl">文字色</span>
+          <input type="color" id="inkColor" value="#4a3f24" />
+          <input type="text" id="inkHex" value="#4a3f24" maxlength="7" spellcheck="false" />
+        </div>
+
+        <div class="dark-row">
+          <span>暗色卡片模式</span>
+          <label class="switch">
+            <input type="checkbox" id="darkSwitch" />
+            <span class="track"></span>
+          </label>
+        </div>
+
+        <h3>快捷预设</h3>
+        <div class="presets" id="presets"></div>
+
+        <div class="spacer"></div>
+        <div class="btn-row">
+          <button class="btn danger-ghost" id="resetBtn">恢复默认</button>
+          <button class="btn" id="deleteBtn" style="display:none;">删 除</button>
+        </div>
+        <div class="btn-row">
+          <button class="btn" id="cancelBtn">取消</button>
+          <button class="btn primary" id="saveBtn">保 存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="custom-theme.js"></script>
+</body>
+</html>

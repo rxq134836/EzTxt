@@ -1210,10 +1210,20 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   }
 
   function applyTheme(key, persist = true) {
-    if (!THEMES.find((t) => t.key === key)) key = 'amber';
+    if (key !== 'custom' && !THEMES.find((t) => t.key === key)) key = 'amber';
+    // custom 主题：按 customThemeId 从列表取项注入派生变量
+    if (key === 'custom') {
+      const item = (settings.customThemes || []).find((t) => t.id === settings.customThemeId);
+      if (item) {
+        api.applyCustomThemeVars(item);
+      } else {
+        key = 'amber'; // 激活项不存在（被删/损坏）→ 回退预置
+      }
+    }
     document.body.dataset.theme = key;
     settings.theme = key;
-    if (persist) api.saveSettings({ theme: key });
+    if (key !== 'custom') api.clearCustomThemeVars();
+    if (persist) api.saveSettings({ theme: key, ...(key !== 'custom' ? { customThemeId: null } : {}) });
   }
 
   /** 应用窗口材质：opaque（经典不透明）/ translucent（半透明）。

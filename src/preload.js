@@ -177,6 +177,77 @@ turndownService.addRule('pre', {
   }
 });
 
+// ===== 自定义主题（3 色 + 明暗 → 完整 CSS 变量，主窗口/设置窗口/编辑器共用） =====
+// 自定义主题可注入的全部 CSS 变量 key（切回预置主题时按此列表清除内联覆盖）
+const CUSTOM_THEME_VARS = [
+  'bg', 'bg-solid', 'bg-rgb',
+  'accent', 'accent-rgb',
+  'ink', 'ink-rgb',
+  'ink-soft', 'ink-mute',
+  'line', 'line-soft',
+  'accent-soft',
+  'card-bg', 'card-bg-hover', 'hover-bg',
+  'surface', 'surface-strong'
+];
+
+function hexToRgbArr(hex) {
+  const s = String(hex || '').trim().replace(/^#/, '');
+  if (!/^[0-9a-fA-F]{6}$/.test(s)) return null;
+  const n = parseInt(s, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// 颜色混合：t = A 的占比（0~1），返回 rgb 数组
+function mixRgb(hexA, hexB, t) {
+  const a = hexToRgbArr(hexA);
+  const b = hexToRgbArr(hexB);
+  if (!a || !b) return null;
+  return a.map((v, i) => Math.round(v * t + b[i] * (1 - t)));
+}
+
+/**
+ * 由 {accent, bg, ink, dark} 派生自定义主题的完整 CSS 变量对象。
+ * 派生规则与 11 套预置主题一致：
+ *  - 次级/弱化文字 = ink 与 bg 按 73%/40% 混合
+ *  - 线色 = ink 低透明度；强调浅底 = accent 低透明度
+ *  - 表面色（卡片）按明暗两套透明度
+ * 非法/缺失输入回退到琥珀默认值。
+ */
+function deriveCustomTheme(theme) {
+  const t = theme || {};
+  const ok6 = (v) => hexToRgbArr(v) !== null;
+  const accent = ok6(t.accent) ? String(t.accent).trim() : '#e0a82e';
+  const bg = ok6(t.bg) ? String(t.bg).trim() : '#FAF5E1';
+  const ink = ok6(t.ink) ? String(t.ink).trim() : '#4a3f24';
+  const dark = !!t.dark;
+  const accentRgb = hexToRgbArr(accent).join(', ');
+  const inkRgb = hexToRgbArr(ink).join(', ');
+  const bgRgb = hexToRgbArr(bg).join(', ');
+  const soft = mixRgb(ink, bg, 0.73).join(', ');
+  const mute = mixRgb(ink, bg, 0.4).join(', ');
+  return {
+    // --bg 带透明度（浅色 0.86 / 暗色 0.92，与预置主题一致）
+    'bg': 'rgba(' + bgRgb + ', ' + (dark ? '0.92' : '0.86') + ')',
+    'bg-solid': bg,
+    'bg-rgb': bgRgb,
+    'accent': accent,
+    'accent-rgb': accentRgb,
+    'ink': ink,
+    'ink-rgb': inkRgb,
+    'ink-soft': 'rgb(' + soft + ')',
+    'ink-mute': 'rgb(' + mute + ')',
+    'line': 'rgba(' + inkRgb + ', 0.12)',
+    'line-soft': 'rgba(' + inkRgb + ', 0.06)',
+    'accent-soft': 'rgba(' + accentRgb + ', 0.18)',
+    // 卡片/悬停表面：浅色白透明 / 暗色微光变体（与 night 主题一致）
+    'card-bg': dark ? 'rgba(255, 255, 255, 0.07)' : 'rgba(255, 255, 255, 0.55)',
+    'card-bg-hover': dark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.8)',
+    'hover-bg': dark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.7)',
+    'surface': dark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.75)',
+    'surface-strong': dark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.9)'
+  };
+}
+
 contextBridge.exposeInMainWorld('api', {
   // 笔记数据
   loadNote: () => ipcRenderer.invoke('load-note'),
@@ -214,6 +285,26 @@ contextBridge.exposeInMainWorld('api', {
 
   // 打开独立的设置窗口
   openSettings: () => ipcRenderer.send('open-settings'),
+  // 打开自定义主题编辑器窗口（editId 空=新建；传 id=编辑已有主题）
+  openCustomTheme: (editId) => ipcRenderer.send('open-custom-theme', editId || null),
+
+  // ===== 自定义主题 =====
+  // 由 {accent, bg, ink, dark} 派生完整 CSS 变量对象（key 不带 -- 前缀）
+  deriveCustomTheme: (theme) => deriveCustomTheme(theme),
+  // 自定义主题占用的 CSS 变量 key 列表（切回预置主题时用于清除内联覆盖）
+  customThemeVarKeys: CUSTOM_THEME_VARS,
+  // 把派生变量注入指定元素（elem 缺省为 body）；返回注入的变量对象
+  applyCustomThemeVars: (theme, elem) => {
+    const vars = deriveCustomTheme(theme);
+    const target = elem || document.body;
+    for (const [k, v] of Object.entries(vars)) target.style.setProperty('--' + k, v);
+    return vars;
+  },
+  // 清除注入的自定义主题变量（恢复当前 data-theme 预置值）
+  clearCustomThemeVars: (elem) => {
+    const target = elem || document.body;
+    for (const k of CUSTOM_THEME_VARS) target.style.removeProperty('--' + k);
+  },
   // 设置被修改时（主进程广播，主窗口即时重新加载应用）
   onSettingsChanged: (callback) => {
     const listener = () => callback();
