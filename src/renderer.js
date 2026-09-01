@@ -170,7 +170,12 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       li.classList.add('is-divider');
       li.dataset.type = 'divider';
       li.innerHTML = `
-        <hr/>
+        <div class="divider-row">
+          <div class="drag-handle" title="拖动排序">
+            <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><circle cx="5" cy="3.5" r="1.3" fill="currentColor"/><circle cx="11" cy="3.5" r="1.3" fill="currentColor"/><circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/><circle cx="5" cy="12.5" r="1.3" fill="currentColor"/><circle cx="11" cy="12.5" r="1.3" fill="currentColor"/></svg>
+          </div>
+          <hr/>
+        </div>
         <input class="divider-label${item.label ? '' : ' is-empty'}" data-action="edit-divider-label"
                type="text" value="${escapeAttr(item.label || '')}"
                placeholder="分区标题（可选）" spellcheck="false" />
@@ -180,6 +185,9 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
 
     li.innerHTML = `
       <div class="task-row">
+        <div class="drag-handle" title="拖动排序">
+          <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true"><circle cx="5" cy="3.5" r="1.3" fill="currentColor"/><circle cx="11" cy="3.5" r="1.3" fill="currentColor"/><circle cx="5" cy="8" r="1.3" fill="currentColor"/><circle cx="11" cy="8" r="1.3" fill="currentColor"/><circle cx="5" cy="12.5" r="1.3" fill="currentColor"/><circle cx="11" cy="12.5" r="1.3" fill="currentColor"/></svg>
+        </div>
         <div class="card-checkbox${item.done ? ' is-checked' : ''}"
              data-action="toggle-done" role="checkbox" aria-checked="${item.done}"></div>
         <input class="card-title" data-action="edit-title"
@@ -560,6 +568,117 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   }
 
   // ============================================================
+  //  拖动排序（HTML5 DnD；仅从左侧把手发起，搜索过滤时禁用）
+  //  数据：items 数组顺序即显示/保存顺序；DOM 同步移动节点，
+  //  不重渲染（保留编辑器输入状态），走 markDirty + 防抖自动保存持久化。
+  // ============================================================
+  let dragId = null; // 正在拖动的卡片 id
+
+  /** 把手按下时临时开启 li.draggable（避免整卡 draggable 干扰输入框/编辑器选字） */
+  function onTaskListMouseDown(e) {
+    if (e.button !== 0) return;
+    const handle = e.target.closest ? e.target.closest('.drag-handle') : null;
+    if (!handle) return;
+    const li = handle.closest('.task-card');
+    if (li && !activeSearch) li.draggable = true;
+  }
+
+  /** 未发生拖动的普通抬起：撤销 draggable */
+  function onTaskListMouseUp(e) {
+    const li = e.target.closest ? e.target.closest('.task-card') : null;
+    if (li && li.draggable) li.draggable = false;
+  }
+
+  function onTaskListDragStart(e) {
+    const li = e.target.closest ? e.target.closest('.task-card') : null;
+    if (!li || !li.draggable) { e.preventDefault(); return; }
+    dragId = li.dataset.id;
+    li.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', dragId);
+  }
+
+  /** 根据光标 Y 计算落点：插入到哪张卡片的前/后；无参照卡（空列表）返回 null */
+  function computeDropTarget(clientY) {
+    const cards = taskListEl.querySelectorAll('.task-card:not(.is-dragging)');
+    for (const card of cards) {
+      const r = card.getBoundingClientRect();
+      if (r.height > 0 && clientY < r.top + r.height / 2) {
+        return { id: card.dataset.id, after: false };
+      }
+    }
+    const last = cards.length ? cards[cards.length - 1] : null;
+    return last ? { id: last.dataset.id, after: true } : null;
+  }
+
+  function clearDropIndicator() {
+    taskListEl
+      .querySelectorAll('.drop-above, .drop-below')
+      .forEach((el) => el.classList.remove('drop-above', 'drop-below'));
+  }
+
+  function onTaskListDragOver(e) {
+    if (!dragId) return;
+    e.preventDefault(); // 允许 drop
+    e.dataTransfer.dropEffect = 'move';
+    const t = computeDropTarget(e.clientY);
+    clearDropIndicator();
+    if (t) {
+      const el = cardElById(t.id);
+      if (el) el.classList.add(t.after ? 'drop-below' : 'drop-above');
+    }
+  }
+
+  function onTaskListDragLeave(e) {
+    if (!dragId) return;
+    if (e.relatedTarget && taskListEl.contains(e.relatedTarget)) return; // 子元素间移动
+    clearDropIndicator();
+  }
+
+  function onTaskListDrop(e) {
+    if (!dragId) return;
+    e.preventDefault();
+    const t = computeDropTarget(e.clientY);
+    if (t && t.id !== dragId) moveItemOrder(dragId, t.id, t.after);
+    cleanupCardDrag();
+  }
+
+  function onTaskListDragEnd() {
+    cleanupCardDrag();
+  }
+
+  function cleanupCardDrag() {
+    clearDropIndicator();
+    const li = dragId ? cardElById(dragId) : null;
+    if (li) {
+      li.classList.remove('is-dragging');
+      li.draggable = false;
+    }
+    dragId = null;
+  }
+
+  /** 把 id 卡片移动到 refId 前/后（items 数组 + DOM 同步），自动保存持久化 */
+  function moveItemOrder(id, refId, after) {
+    const from = items.findIndex((it) => it.id === id);
+    if (from < 0) return;
+    const [moved] = items.splice(from, 1);
+    const to = items.findIndex((it) => it.id === refId);
+    if (to < 0) {
+      items.splice(from, 0, moved); // 参照卡不存在（理论不发生）：放回原位
+      return;
+    }
+    items.splice(after ? to + 1 : to, 0, moved);
+    markDirty();
+    scheduleAutosave();
+    const li = cardElById(id);
+    const refLi = cardElById(refId);
+    if (li && refLi) {
+      if (after) refLi.after(li);
+      else refLi.before(li);
+    }
+  }
+
+  // ============================================================
   //  数据操作（都要 markDirty + scheduleAutosave + 刷新对应 DOM）
   // ============================================================
 
@@ -864,6 +983,93 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     syncEditorNote(editor, id);
   }
 
+  /** 光标是否在删除线（del/s/strike）内 */
+  function caretInStrikethrough(editor) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const c = sel.getRangeAt(0).startContainer;
+    const el = c.nodeType === 3 ? c.parentElement : c;
+    return !!(el && el.closest && editor.contains(el) && el.closest('del, s, strike'));
+  }
+
+  /**
+   * 回车后清理新行继承的删除线。原生 contenteditable 回车会把 <del> 拆分延续到
+   * 新块（如 <p><del>文</del></p><p><del><br></del></p>），视觉上第二行仍是删除线。
+   * 默认回车完成后（setTimeout 0）把光标所在块内的 del/s/strike 全部解开；
+   * 光标直接位于编辑器根时只解开空壳（无文本或仅 <br>），避免误伤上一行内容。
+   */
+  function cleanupStrikethroughAfterEnter(editor, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const c = sel.getRangeAt(0).startContainer;
+    const el = c.nodeType === 3 ? c.parentElement : c;
+    if (!el || !editor.contains(el)) return;
+    const block = el.closest('p, div, h1, h2, h3, h4, h5, h6, li, pre');
+    const scope = block && editor.contains(block) ? block : editor;
+    const onlyEmpty = scope === editor; // 根级无法界定“新行”，只清理空壳
+    let changed = false;
+    scope.querySelectorAll('del, s, strike').forEach((d) => {
+      if (onlyEmpty && d.textContent.trim() !== '') return;
+      const parent = d.parentNode;
+      if (!parent) return;
+      while (d.firstChild) parent.insertBefore(d.firstChild, d);
+      parent.removeChild(d);
+      changed = true;
+    });
+    if (changed) syncEditorNote(editor, id);
+  }
+
+  /** 光标是否位于引用块（blockquote，Tab 缩进产生）内的空行上 */
+  function caretInEmptyBlockquote(editor) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return false;
+    const c = sel.getRangeAt(0).startContainer;
+    const el = c.nodeType === 3 ? c.parentElement : c;
+    if (!el || !editor.contains(el)) return false;
+    const bq = el.closest('blockquote');
+    if (!bq || !editor.contains(bq)) return false;
+    const block = el.closest('p, div, h1, h2, h3, h4, h5, h6, li, pre');
+    if (!block || !bq.contains(block)) return false;
+    return block.textContent.trim() === '' && !block.querySelector('img');
+  }
+
+  /**
+   * 退出引用块：光标在引用块内的空行上时按回车（Typora 习惯）。
+   * 三种情况：空行是引用块唯一内容 → 整体替换为普通段落；
+   * 空行在末尾 → 删空行、在引用块后插入新段落；空行在中间 → 拆分两个引用块、中间插段落。
+   */
+  function exitBlockquote(editor, id) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const c = sel.getRangeAt(0).startContainer;
+    const el = c.nodeType === 3 ? c.parentElement : c;
+    if (!el || !editor.contains(el)) return;
+    const bq = el.closest('blockquote');
+    const block = el.closest('p, div, h1, h2, h3, h4, h5, h6, li');
+    if (!bq || !block || !bq.contains(block)) return;
+
+    const p = document.createElement('p');
+    if (block === bq.firstElementChild && block === bq.lastElementChild) {
+      bq.replaceWith(block); // 引用块只剩空行：脱离后原位保留空段落
+    } else if (block === bq.lastElementChild) {
+      block.remove();
+      bq.after(p);
+    } else {
+      const rest = document.createElement('blockquote');
+      while (block.nextSibling) rest.appendChild(block.nextSibling);
+      block.remove();
+      bq.after(p);
+      p.after(rest);
+    }
+    // 光标落入新段落
+    const r = document.createRange();
+    r.setStart(p, 0);
+    r.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    syncEditorNote(editor, id);
+  }
+
   /**
    * Typora 式代码块输入：光标所在「行」只含 ``` 或 ```语言 时按回车，
    * 把该行替换成 <pre><code class="language-xxx"> 代码块，光标落入其中。
@@ -1117,6 +1323,17 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
         if (!e.shiftKey && fenceToCodeBlock(actionEl, id)) {
           e.preventDefault();
           return;
+        }
+        // 引用块（Tab 缩进产生 blockquote）内空行回车 → 退出引用块（Typora 习惯）
+        if (!e.shiftKey && caretInEmptyBlockquote(actionEl)) {
+          e.preventDefault();
+          exitBlockquote(actionEl, id);
+          return;
+        }
+        // 删除线内回车：原生行为会把 <del> 拆分延续到新行，回车完成后清理光标所在新块
+        // （Shift+Enter 软换行留在同一块内，不清理）
+        if (!e.shiftKey && caretInStrikethrough(actionEl)) {
+          setTimeout(() => cleanupStrikethroughAfterEnter(actionEl, id), 0);
         }
       }
 
@@ -1693,6 +1910,14 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     taskListEl.addEventListener('click', onTaskListClick);
     taskListEl.addEventListener('input', onTaskListInput);
     taskListEl.addEventListener('keydown', onTaskListKeyDown);
+    // 拖动排序（把手 mousedown 临时武装 draggable → dragstart/over/drop 重排）
+    taskListEl.addEventListener('mousedown', onTaskListMouseDown);
+    taskListEl.addEventListener('mouseup', onTaskListMouseUp);
+    taskListEl.addEventListener('dragstart', onTaskListDragStart);
+    taskListEl.addEventListener('dragover', onTaskListDragOver);
+    taskListEl.addEventListener('dragleave', onTaskListDragLeave);
+    taskListEl.addEventListener('drop', onTaskListDrop);
+    taskListEl.addEventListener('dragend', onTaskListDragEnd);
     taskListEl.addEventListener('paste', onTaskListPaste);
     // 代码块高亮：进入编辑还原纯文本，失焦重新高亮
     taskListEl.addEventListener('focusin', onEditorFocusIn);

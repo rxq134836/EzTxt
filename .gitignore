@@ -4,6 +4,12 @@ node_modules/
 # npm 本地临时 cache(用 --cache .npm-cache 时)
 .npm-cache/
 
+# electron-builder 构建工具缓存（NSIS 等，自动下载，无需提交）
+.electron-builder-cache/
+
+# 打包日志
+build-log.txt
+
 # 构建产物
 dist/
 build/

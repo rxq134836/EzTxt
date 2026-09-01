@@ -456,6 +456,43 @@ body[data-material="acrylic"] .app {
   border-top: 1px dashed var(--line);
   margin: 10px 4px 2px;
 }
+
+/* ===== 拖动排序 ===== */
+/* 把手：absolute 零占位（默认布局与旧版一致）；hover 卡片时浮现、行内容轻推让位 */
+.task-row { position: relative; }
+.task-card.is-divider .divider-row { display: flex; align-items: center; position: relative; }
+.task-card.is-divider .divider-row hr { flex: 1 1 auto; margin: 10px 4px 2px 0; }
+.drag-handle {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-mute);
+  cursor: grab;
+  opacity: 0;
+  pointer-events: none; /* 未显示时不拦截下方复选框的点击 */
+  transition: opacity 0.15s ease;
+  user-select: none;
+}
+.task-card:hover .drag-handle { opacity: 0.5; pointer-events: auto; }
+.task-card:hover .drag-handle:hover { opacity: 1; color: var(--accent); }
+.drag-handle:active { cursor: grabbing; }
+/* hover 时行内容右移给把手让位（仅标题行/分割线行，备注区不动） */
+.task-row,
+.task-card.is-divider .divider-row { transition: padding 0.15s ease; }
+.task-card:hover .task-row { padding-left: 18px; }
+.task-card.is-divider:hover .divider-row { padding-left: 18px; }
+/* 拖动中的半透明源卡片 */
+.task-card.is-dragging { opacity: 0.35; }
+/* 落点指示线（顶部/底部内侧描边，避免布局抖动） */
+.task-card.drop-above { box-shadow: inset 0 2px 0 0 var(--accent); }
+.task-card.drop-below { box-shadow: inset 0 -2px 0 0 var(--accent); }
+
 /* 分割线可选标题：有内容时始终显示；空标题默认隐藏，hover 显示占位可编辑 */
 .task-card.is-divider .divider-label {
   display: none;
