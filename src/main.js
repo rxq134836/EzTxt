@@ -526,6 +526,8 @@ function animateWindowBounds(from, to, duration = 200, onDone = null) {
  */
 function doSnapResize(nx, ny, edge = null) {
   mainWindow.setAlwaysOnTop(true, 'screen-saver');
+  // mini 态任务栏不显示 EzTxt，只保留托盘图标
+  mainWindow.setSkipTaskbar(true);
   mainWindow.webContents.send('pin-toggled', true); // 通知渲染层 pin 按钮高亮
   mainWindow.webContents.send('snap-state-changed', true, edge || null);
   // mini 态切掉系统材质：避免亚克力磨砂铺满整个 56px 窗口矩形，球外露空白
@@ -623,6 +625,8 @@ function exitSnapped() {
   savedBounds = null;
   snapEdge = null;
   snapMiniPos = null;
+  // 退出 mini：任务栏图标恢复
+  mainWindow.setSkipTaskbar(false);
   // 带 edge 通知渲染层：从贴近 mini 球的角展开（左→左下、右→右下…）
   mainWindow.webContents.send('snap-state-changed', false, edge || null);
 

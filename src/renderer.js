@@ -1354,20 +1354,21 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     }, 220);
   }
 
-  /** 关闭按钮悬浮提示跟随设置：缩小到托盘 / 退出软件 */
+  /** 关闭按钮悬浮提示跟随设置：缩为 mini 球 / 关闭软件 */
   function updateCloseButtonTitle() {
-    closeBtn.title = settings.closeAction === 'quit' ? '关闭软件' : '缩小到托盘';
+    closeBtn.title = settings.closeAction === 'quit' ? '关闭软件' : '缩为 mini 球';
   }
 
   function initWindowControls() {
-    minBtn.addEventListener('click', () => api.minimize());
+    // 最小化按钮：同样进入 mini 态（缩为屏幕边缘 mini 球），保留任务栏常驻
+    minBtn.addEventListener('click', () => api.enterMini());
     shrinkBtn.addEventListener('click', () => api.enterMini());
-    // 关闭按钮：按设置直接执行（缩小到托盘 / 退出软件），不弹窗
+    // 关闭按钮：按设置执行 —— 「关闭软件」直接退出；「缩小到托盘」进入 mini 球态
     closeBtn.addEventListener('click', () => {
       if (settings.closeAction === 'quit') {
         api.quit(); // 退出软件
       } else {
-        api.close(); // 缩小到托盘
+        api.enterMini(); // 主页面收起，屏幕边缘弹出 mini 球
       }
     });
     pinBtn.addEventListener('click', () => api.togglePin());
