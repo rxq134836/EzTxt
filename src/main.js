@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs/promises');
 const { existsSync, readFileSync } = require('fs');
 const crypto = require('crypto');
+const { spawn } = require('child_process');
 // 自动更新（electron-updater）：仅打包后生效（开发模式自动跳过）
 const { autoUpdater } = require('electron-updater');
 
@@ -597,6 +598,71 @@ function animateWindowBounds(from, to, duration = 200, onDone = null) {
   step();
 }
 
+// ======= 全局键盘监听（mini 球动画 gif 打字检测） =======
+// 用 PowerShell 轮询 GetAsyncKeyState，捕获 mini 态下其他应用的打字活动。
+// 检测到按键 → IPC 发送 'typing-activity' → 渲染层 onEditorTyping()
+// 进程常驻（app ready 启动，quit 停止），用 forwardTyping 标志控制是否转发，
+// 避免 Add-Type 每次进 mini 重新编译（首次编译需数秒）。
+let keyMonitorProc = null;
+let keyMonitorRestartTimer = null;
+let forwardTyping = false; // 是否转发打字事件（仅 mini + gif 模式时 true）
+
+function startKeyMonitor() {
+  if (keyMonitorProc) return;
+  // 只检查打字相关键码（0x08-0x5A：Backspace~Z，83 个），减少 P/Invoke 调用量
+  const psScript = `
+Add-Type @"
+using System;using System.Runtime.InteropServices;
+public class K{[DllImport("user32.dll")]public static extern short GetAsyncKeyState(int v);}
+"@
+$prev=New-Object bool[] 256
+while($true){
+  $np=$false
+  for($i=8;$i -le 90;$i++){
+    $now=([K]::GetAsyncKeyState($i) -band 0x8000) -ne 0
+    if($now -and -not $prev[$i]){$np=$true}
+    $prev[$i]=$now
+  }
+  if($np){[Console]::Out.WriteLine("1");[Console]::Out.Flush()}
+  Start-Sleep -Milliseconds 20
+}`.trim();
+  try {
+    keyMonitorProc = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], {
+      windowsHide: true,
+    });
+    // 逐行解析 stdout（避免多个按键事件合并成一次 data 回调）
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: keyMonitorProc.stdout });
+    rl.on('line', () => {
+      if (forwardTyping && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('typing-activity');
+      }
+    });
+    // 进程意外退出 → 3 秒后自动重启
+    keyMonitorProc.on('error', () => { keyMonitorProc = null; scheduleRestart(); });
+    keyMonitorProc.on('exit', () => { keyMonitorProc = null; scheduleRestart(); });
+  } catch (_) { keyMonitorProc = null; scheduleRestart(); }
+}
+
+function scheduleRestart() {
+  if (keyMonitorRestartTimer) return;
+  keyMonitorRestartTimer = setTimeout(() => {
+    keyMonitorRestartTimer = null;
+    if (!app.isQuitting) startKeyMonitor();
+  }, 3000);
+}
+
+function setTypingForward(enabled) {
+  forwardTyping = enabled;
+}
+
+function stopKeyMonitor() {
+  if (keyMonitorRestartTimer) { clearTimeout(keyMonitorRestartTimer); keyMonitorRestartTimer = null; }
+  if (!keyMonitorProc) return;
+  try { keyMonitorProc.kill(); } catch (_) {}
+  keyMonitorProc = null;
+}
+
 /**
  * 执行缩小动作：先发 IPC 让渲染层隐藏 .app，再平滑缩窗（防 race 漏出）
  * 同时把 mini 球设为置顶(高于桌面其他窗口),退出 mini 态时恢复用户原置顶设置。
@@ -612,6 +678,8 @@ function doSnapResize(nx, ny, edge = null) {
   const from = mainWindow.getBounds();
   const to = { x: Math.round(nx), y: Math.round(ny), width: MINI_SIZE, height: MINI_SIZE };
   animateWindowBounds(from, to, 180);
+  // mini 态开启打字事件转发（PowerShell 进程常驻，仅切换标志）
+  setTypingForward(true);
 }
 
 function checkSnapDebounced() {
@@ -658,6 +726,8 @@ function enterMini() {
  */
 function exitSnapped() {
   if (!isSnapped || !mainWindow) return;
+  // 退出 mini：停止打字事件转发
+  setTypingForward(false);
 
   const miniBounds = mainWindow.getBounds();
   const wa = getNearestWorkArea();
@@ -1014,6 +1084,8 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
   setupAutoUpdater();
+  // 启动全局键盘监听进程（常驻；Add-Type 首次编译需数秒，提前启动避免 mini 时才编译）
+  startKeyMonitor();
 
   // 启动后延迟几秒再检查更新，避免拖慢首次启动
   setTimeout(() => {
@@ -1039,4 +1111,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  stopKeyMonitor();
 });

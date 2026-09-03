@@ -62,6 +62,7 @@
   let saveTimer = null;
   let activeSearch = ''; // 当前过滤关键字
   let selectedId = null; // 选中的卡片（用于 Backspace 删除）
+  let pendingDeleteId = null; // 单条删除二次确认待执行 id
 
   // ===== 主题常量 & 设置状态 =====
   const THEMES = [
@@ -148,6 +149,148 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     if (isDirty) return;
     isDirty = true;
     setStatus('dirty', '未保存的修改');
+  }
+
+  // ============================================================
+  //  编辑器 undo / redo（基于 innerHTML 快照 + 光标偏移 + 防抖）
+  //  背景：contenteditable 原生 Ctrl+Z 在 innerHTML 被重渲染
+  //  （rerenderEditorContent）或 DOM API 直接修改（wrapSelectionWith）
+  //  后失效，故自管理快照栈。快照同时存光标字符偏移，恢复后还原。
+  // ============================================================
+  const editorUndoMap = new Map(); // editor 元素 → { undo, redo, lastSnap, lastCaret, timer }
+
+  const UNDO_MAX = 50;       // 最多保留 50 步
+  const UNDO_DEBOUNCE = 600; // 停止输入 600ms 后压栈（连续打字算一步）
+
+  /** 获取/创建编辑器的 undo 状态对象 */
+  function getUndoState(editor) {
+    let st = editorUndoMap.get(editor);
+    if (!st) {
+      st = { undo: [], redo: [], lastSnap: '', lastCaret: 0, timer: null };
+      editorUndoMap.set(editor, st);
+    }
+    return st;
+  }
+
+  /** 获取光标在编辑器内的字符偏移（从根开始，按文本节点顺序累加） */
+  function getCaretOffsetInEditor(editor) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return 0;
+    const range = sel.getRangeAt(0);
+    if (!editor.contains(range.startContainer)) return 0;
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let node;
+    while ((node = walker.nextNode())) {
+      if (node === range.startContainer) return offset + range.startOffset;
+      offset += node.data.length;
+    }
+    return offset;
+  }
+
+  /** 按字符偏移把光标恢复到编辑器内 */
+  function setCaretOffsetInEditor(editor, offset) {
+    if (offset < 0) offset = 0;
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node;
+    let remaining = offset;
+    let target = null;
+    let targetOffset = 0;
+    while ((node = walker.nextNode())) {
+      if (remaining <= node.data.length) {
+        target = node; targetOffset = remaining; break;
+      }
+      remaining -= node.data.length;
+    }
+    if (!target) {
+      // 偏移超出末尾 → 定位到最后一个文本节点末尾
+      const last = editor.lastChild;
+      if (last && last.nodeType === 3) {
+        target = last; targetOffset = last.data.length;
+      } else if (last) {
+        const r = document.createRange();
+        r.setStartAfter(last); r.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(r);
+        return;
+      } else {
+        // 空编辑器
+        const r = document.createRange();
+        r.setStart(editor, 0); r.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges(); sel.addRange(r);
+        return;
+      }
+    }
+    const r = document.createRange();
+    r.setStart(target, targetOffset);
+    r.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  /** 防抖压栈：连续输入归并为一步，停止打字后压入 */
+  function scheduleUndoSnapshot(editor) {
+    const st = getUndoState(editor);
+    clearTimeout(st.timer);
+    st.timer = setTimeout(() => pushUndoSnapshot(editor), UNDO_DEBOUNCE);
+  }
+
+  /** 立即压栈当前快照（跳过防抖），存 { html, caret } 对象 */
+  function pushUndoSnapshot(editor) {
+    const st = getUndoState(editor);
+    clearTimeout(st.timer);
+    const snap = editor.innerHTML;
+    if (snap === st.lastSnap) return; // 无变化
+    const caret = getCaretOffsetInEditor(editor);
+    // 把"上一个状态"压入 undo 栈（含其光标偏移）
+    st.undo.push({ html: st.lastSnap, caret: st.lastCaret });
+    if (st.undo.length > UNDO_MAX) st.undo.shift();
+    // 更新 lastSnap/lastCaret 为当前状态
+    st.lastSnap = snap;
+    st.lastCaret = caret;
+    st.redo.length = 0; // 新操作清空 redo
+  }
+
+  /** 在编辑器聚焦时初始化快照基线（仅首次或重渲染后） */
+  function initUndoBaseline(editor) {
+    const st = getUndoState(editor);
+    st.lastSnap = editor.innerHTML;
+    st.lastCaret = getCaretOffsetInEditor(editor);
+  }
+
+  /** 撤销：弹出上一步恢复 innerHTML + 光标，当前状态推入 redo */
+  function editorUndo(editor) {
+    const st = getUndoState(editor);
+    if (st.undo.length === 0) return false;
+    // 确保当前状态已压栈（防抖未到期的情况）
+    if (st.lastSnap !== editor.innerHTML) {
+      st.undo.push({ html: st.lastSnap, caret: st.lastCaret });
+      st.lastSnap = editor.innerHTML;
+      st.lastCaret = getCaretOffsetInEditor(editor);
+    }
+    // 当前状态推入 redo
+    st.redo.push({ html: editor.innerHTML, caret: getCaretOffsetInEditor(editor) });
+    const prev = st.undo.pop();
+    editor.innerHTML = prev.html;
+    setCaretOffsetInEditor(editor, prev.caret);
+    st.lastSnap = prev.html;
+    st.lastCaret = prev.caret;
+    return true;
+  }
+
+  /** 重做：恢复被撤销的操作 */
+  function editorRedo(editor) {
+    const st = getUndoState(editor);
+    if (st.redo.length === 0) return false;
+    st.undo.push({ html: editor.innerHTML, caret: getCaretOffsetInEditor(editor) });
+    const next = st.redo.pop();
+    editor.innerHTML = next.html;
+    setCaretOffsetInEditor(editor, next.caret);
+    st.lastSnap = next.html;
+    st.lastCaret = next.caret;
+    return true;
   }
 
   // ============================================================
@@ -346,6 +489,10 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
 
   // 代码块高亮：聚焦编辑时还原纯文本，失焦时重新高亮（事件委托在 #taskList）
   function onEditorFocusIn(e) {
+    const editor = e.target.closest && e.target.closest('.card-editor');
+    // 编辑器聚焦：初始化 undo 基线（首次聚焦或重渲染后）
+    if (editor) initUndoBaseline(editor);
+
     const pre = e.target.closest && e.target.closest('pre');
     if (!pre) return;
     pre.dataset.caretOffset = String(caretOffsetIn(pre));
@@ -364,13 +511,19 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     // 让删除线等格式始终由 marked 生成（不依赖 Chromium 保留 <del>，失焦后仍可见）
     const it = id ? findItem(id) : null;
     if (it && !isMiniMode) {
+      // 离开前确保当前输入已压栈，供下次聚焦时 Ctrl+Z 能撤回到此编辑会话的步骤
+      pushUndoSnapshot(editor);
       Promise.resolve(api.htmlToMarkdown(editor.innerHTML))
         .then((md) => {
           if (md !== it.note) updateNote(id, md);
           rerenderEditorContent(editor, md);
+          // innerHTML 被重渲染替换 → 旧 undo 历史失效，清空并重置基线
+          const st = editorUndoMap.get(editor);
+          if (st) { st.undo.length = 0; st.redo.length = 0; st.lastSnap = ''; }
         })
         .catch(() => {});
     } else {
+      pushUndoSnapshot(editor);
       highlightCodeBlocks(editor);
     }
   }
@@ -789,7 +942,15 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
 
   function deleteSelected() {
     if (!selectedId) return;
-    deleteItem(selectedId);
+    // 二次确认（与批量删除共用确认弹窗）
+    const item = findItem(selectedId);
+    const title = item && item.title ? item.title.trim() : '';
+    const label = title ? `「${title.slice(0, 20)}${title.length > 20 ? '…' : ''}」` : '该项';
+    confirmText.textContent = `确定要删除${label}吗？此操作不可恢复。`;
+    confirmMask.classList.remove('hidden');
+    btnConfirmOk.focus();
+    // 标记待删除 id，确认后执行
+    pendingDeleteId = selectedId;
   }
 
   // ============================================================
@@ -957,6 +1118,8 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     sel.removeAllRanges();
     sel.addRange(r);
     syncEditorNote(editor, id);
+    // 离散格式操作立即压栈（不防抖），保证 Ctrl+Z 可精确撤销
+    pushUndoSnapshot(editor);
   }
 
   /**
@@ -981,6 +1144,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     while (del.firstChild) parent.insertBefore(del.firstChild, del);
     parent.removeChild(del);
     syncEditorNote(editor, id);
+    pushUndoSnapshot(editor);
   }
 
   /** 光标是否在删除线（del/s/strike）内 */
@@ -1284,6 +1448,8 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     } else if (action === 'edit-note') {
       // 所见即所得编辑器：渲染后的 DOM → Markdown 保存
       syncEditorNote(actionEl, id);
+      // 防抖压栈 undo 快照（连续打字归并为一步）
+      scheduleUndoSnapshot(actionEl);
     }
   }
 
@@ -1337,6 +1503,15 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
         }
       }
 
+      // Ctrl+Z 撤销 / Ctrl+Shift+Z / Ctrl+Y 重做（自管理快照栈）
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) {
+        const isRedo = e.shiftKey || e.key === 'y';
+        e.preventDefault();
+        const did = isRedo ? editorRedo(actionEl) : editorUndo(actionEl);
+        if (did) syncEditorNote(actionEl, id);
+        return;
+      }
+
       // Tab / Shift+Tab：缩进 / 反缩进（列表内缩进嵌套层级）
       if (e.key === 'Tab') {
         e.preventDefault();
@@ -1361,6 +1536,9 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   // ============================================================
 
   function onGlobalKeyDown(e) {
+    // 打字状态追踪：mini 球处于动画模式时，任何键盘输入都驱动 gif 切换
+    if (isMiniGifActive()) onEditorTyping();
+
     // Ctrl+S：立即保存
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
@@ -1398,6 +1576,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     // Esc：关闭确认框 / 退出批量选择 / 关闭帮助 / 搜索条
     if (e.key === 'Escape') {
       if (!confirmMask.classList.contains('hidden')) {
+        pendingDeleteId = null;
         closeBatchDeleteConfirm();
       } else if (batchMode) {
         exitBatchMode();
@@ -1551,22 +1730,97 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     return theme === 'remi' || theme === 'remi-night';
   }
 
-  /** 进入 mini 时应用 GIF 背景（轮换取下一个） */
+  /** 进入 mini 时应用 GIF 背景（轮换取下一个；打字状态优先） */
   function applyMiniGif() {
     if (!isMiniGifActive()) {
       miniBar.classList.remove('is-gif');
       miniBar.style.backgroundImage = '';
       return;
     }
-    const gif = MINI_GIFS[miniGifIndex % MINI_GIFS.length];
-    miniGifIndex = (miniGifIndex + 1) % MINI_GIFS.length;
     miniBar.classList.add('is-gif');
-    miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+    if (currentTypingGif) {
+      // 打字状态 gif 优先（remi-5 慢 / remi-6 快）
+      miniBar.style.backgroundImage = `url(${miniGifUrl(currentTypingGif)})`;
+    } else {
+      const gif = MINI_GIFS[miniGifIndex % MINI_GIFS.length];
+      miniGifIndex = (miniGifIndex + 1) % MINI_GIFS.length;
+      miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+    }
   }
 
   /** GIF 资源路径（打包后相对 app 目录；开发时相对项目根） */
   function miniGifUrl(name) {
     return './mini-gifs/' + name;
+  }
+
+  // ===== 打字状态 GIF（蕾米埃尔主题 + 动画模式时，编辑器/标题输入触发） =====
+  // 慢速打字 → remi-5.gif；快速持续打字 → remi-6.gif；暂停 2s → 恢复轮换 gif
+  const MINI_GIF_SLOW = 'remi-5.gif';
+  const MINI_GIF_FAST = 'remi-6.gif';
+  const TYPE_PAUSE_REVERT_MS = 2000;  // 暂停 2 秒后恢复
+  const TYPE_FAST_INTERVAL = 250;     // 按键间隔 < 250ms 算快
+  const TYPE_SLOW_INTERVAL = 450;    // 按键间隔 > 450ms 算慢
+  const TYPE_SUSTAINED_MS = 1500;   // 快速持续 > 1.5 秒才切 remi-6
+  const TYPE_WINDOW_SIZE = 15;       // 滑动窗口：最近 15 次按键
+
+  let typeKeystrokes = [];      // 最近的按键时间戳
+  let typingGifTimer = null;    // 暂停恢复定时器
+  let currentTypingGif = null;  // 当前打字状态 gif（null = 正常轮换）
+
+  /** 判断当前焦点是否在编辑器/标题输入框内 */
+  function isTypingInEditor() {
+    const ae = document.activeElement;
+    if (!ae) return false;
+    return ae.classList.contains('card-editor') || ae.classList.contains('card-title');
+  }
+
+  /** 编辑器按键时调用：追踪打字速度并切换 gif */
+  function onEditorTyping() {
+    if (!isMiniGifActive()) return; // 非 gif 模式不追踪
+    const now = Date.now();
+    typeKeystrokes.push(now);
+    if (typeKeystrokes.length > TYPE_WINDOW_SIZE) typeKeystrokes.shift();
+
+    clearTimeout(typingGifTimer);
+
+    // 需要至少 3 次按键才能判断速度
+    if (typeKeystrokes.length >= 3) {
+      const span = typeKeystrokes[typeKeystrokes.length - 1] - typeKeystrokes[0];
+      const avgInterval = span / (typeKeystrokes.length - 1);
+
+      if (avgInterval < TYPE_FAST_INTERVAL && span > TYPE_SUSTAINED_MS) {
+        // 快速且持续 → remi-6
+        setTypingGif(MINI_GIF_FAST);
+      } else if (avgInterval > TYPE_SLOW_INTERVAL) {
+        // 慢速 → remi-5
+        setTypingGif(MINI_GIF_SLOW);
+      }
+      // 介于之间 → 保持当前 gif
+    }
+
+    // 暂停 2 秒后恢复
+    typingGifTimer = setTimeout(revertTypingGif, TYPE_PAUSE_REVERT_MS);
+  }
+
+  /** 设置打字状态 gif（避免重复设置） */
+  function setTypingGif(gif) {
+    if (currentTypingGif === gif) return;
+    currentTypingGif = gif;
+    // mini 球可见时立即更新背景
+    if (isMiniGifActive() && !miniBar.classList.contains('hidden')) {
+      miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+    }
+  }
+
+  /** 暂停后恢复到正常轮换 gif */
+  function revertTypingGif() {
+    currentTypingGif = null;
+    typeKeystrokes = [];
+    if (isMiniGifActive() && !miniBar.classList.contains('hidden')) {
+      const gif = MINI_GIFS[miniGifIndex % MINI_GIFS.length];
+      miniGifIndex = (miniGifIndex + 1) % MINI_GIFS.length;
+      miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+    }
   }
 
   const MINI_ANIM_MS = 190; // 与主进程窗口缩放动画（180ms）同步，略留余量
@@ -1669,10 +1923,27 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       if (batchSelected.size === 0) return;
       openBatchDeleteConfirm();
     });
-    btnConfirmOk.addEventListener('click', () => doBatchDelete());
-    btnConfirmCancel.addEventListener('click', () => closeBatchDeleteConfirm());
+    btnConfirmOk.addEventListener('click', () => {
+      // 单条删除（Backspace）与批量删除共用确认弹窗
+      if (pendingDeleteId) {
+        const id = pendingDeleteId;
+        pendingDeleteId = null;
+        closeBatchDeleteConfirm();
+        deleteItem(id);
+        selectedId = null;
+      } else {
+        doBatchDelete();
+      }
+    });
+    btnConfirmCancel.addEventListener('click', () => {
+      pendingDeleteId = null;
+      closeBatchDeleteConfirm();
+    });
     confirmMask.addEventListener('click', (e) => {
-      if (e.target === confirmMask) closeBatchDeleteConfirm();
+      if (e.target === confirmMask) {
+        pendingDeleteId = null;
+        closeBatchDeleteConfirm();
+      }
     });
     btnSearch.addEventListener('click', () => toggleSearch());
     searchClearBtn.addEventListener('click', () => {
@@ -1968,6 +2239,11 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       api.onSnapStateChanged((mini, edge) => {
         if (mini) enterMiniMode(); else exitMiniMode(edge);
       });
+    }
+
+    // 全局键盘活动（mini 态下主进程 PowerShell 监听 → 打字 gif 切换）
+    if (api.onTypingActivity) {
+      api.onTypingActivity(() => onEditorTyping());
     }
 
     // 先加载主题设置，再加载笔记（避免主题闪烁）

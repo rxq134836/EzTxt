@@ -359,5 +359,12 @@ contextBridge.exposeInMainWorld('api', {
     const listener = (_event, isMini, edge) => callback(isMini, edge);
     ipcRenderer.on('snap-state-changed', listener);
     return () => ipcRenderer.removeListener('snap-state-changed', listener);
+  },
+
+  // 全局键盘活动通知（mini 态下 PowerShell 监听检测到按键 → 触发打字 gif 切换）
+  onTypingActivity: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('typing-activity', listener);
+    return () => ipcRenderer.removeListener('typing-activity', listener);
   }
 });
