@@ -15,6 +15,7 @@
   const customSwatchHint = $('#customSwatchHint');
   const materialOptionsEl = $('#materialOptions');
   const closeActionOptionsEl = $('#closeActionOptions');
+  const autoStartSwitchEl = $('#autoStartSwitch');
   const windowSizeOptionsEl = $('#windowSizeOptions');
   const miniBallStyleOptionsEl = $('#miniBallStyleOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
@@ -36,7 +37,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', autoStart: false, shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -232,6 +233,17 @@
     if (action === settings.closeAction) return;
     applyCloseAction(action);
     api.saveSettings({ closeAction: settings.closeAction });
+  }
+
+  // ===== 开机自启（Windows 登录时自动启动） =====
+  function applyAutoStart(enabled) {
+    settings.autoStart = !!enabled;
+    if (autoStartSwitchEl) autoStartSwitchEl.checked = settings.autoStart;
+  }
+
+  function onAutoStartToggle(enabled) {
+    applyAutoStart(enabled);
+    api.saveSettings({ autoStart: settings.autoStart });
   }
 
   // ===== mini 球风格（经典 / 动画） =====
@@ -772,6 +784,13 @@
       applyMaterial(settings.material);   // 材质（含透明度/磨砂感设置显隐）
       applyAcrylicBlur(settings.acrylicBlur); // 磨砂强度（仅亚克力生效）
       applyCloseAction(settings.closeAction); // 关闭按钮行为
+      applyAutoStart(settings.autoStart);     // 开机自启（设置文件为准）
+      // 以系统实际注册表状态校正开关（外部被任务管理器等改动时保持一致）
+      if (api.getAutoStart) {
+        api.getAutoStart().then((osEnabled) => {
+          if (osEnabled !== settings.autoStart) applyAutoStart(osEnabled);
+        }).catch(() => {});
+      }
       applyMiniBallStyle(settings.miniBallStyle); // mini 球风格
       applyWindowSize(settings.windowSize);   // 窗口比例预设
       bgOpacitySlider.value = String(settings.bgOpacity);
@@ -905,6 +924,9 @@
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.close) onCloseActionSelect(btn.dataset.close);
   });
+  if (autoStartSwitchEl) {
+    autoStartSwitchEl.addEventListener('change', () => onAutoStartToggle(autoStartSwitchEl.checked));
+  }
   miniBallStyleOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.mini) onMiniBallStyleSelect(btn.dataset.mini);

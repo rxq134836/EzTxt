@@ -257,6 +257,9 @@ contextBridge.exposeInMainWorld('api', {
   loadSettings: () => ipcRenderer.invoke('load-settings'),
   saveSettings: (patch) => ipcRenderer.invoke('save-settings', patch),
 
+  // 开机自启：查询系统实际状态（保存走 saveSettings({ autoStart })）
+  getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
+
   // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
   setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 

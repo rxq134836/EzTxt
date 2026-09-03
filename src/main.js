@@ -213,6 +213,7 @@ const DEFAULT_SETTINGS = {
   windowSize: 'default',  // 主窗口尺寸预设（见 WINDOW_SIZES；'custom' 用 customWindowSize）
   customWindowSize: { width: 560, height: 620 }, // 自定义窗口尺寸（窗口比例 → 自定义）
   miniBallStyle: 'classic', // mini 球风格：classic（经典圆球）/ gif（蕾米埃尔动画）
+  autoStart: false,         // 开机自启（Windows 登录时自动启动 EzTxt）
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
@@ -281,6 +282,15 @@ function migrateCustomTheme(s) {
   return s;
 }
 
+/** 同步开机自启状态到操作系统（Windows 写注册表 HKCU\...\Run） */
+function syncAutoStart(enabled) {
+  try {
+    app.setLoginItemSettings({ openAtLogin: !!enabled });
+  } catch (err) {
+    console.error('设置开机自启失败：', err);
+  }
+}
+
 function saveSettings(_, patch) {
   return enqueueWrite(async () => {
     try {
@@ -288,6 +298,10 @@ function saveSettings(_, patch) {
       const current = await loadSettings();
       const merged = mergeSettings(current, patch);
       await atomicWrite(settingsFile(), JSON.stringify(merged, null, 2), 'utf8');
+      // 开机自启变更 → 同步到系统
+      if (patch && typeof patch.autoStart === 'boolean') {
+        syncAutoStart(patch.autoStart);
+      }
       // 通知所有窗口重新加载设置（主题/字号/快捷键即时生效；自定义主题保存后设置窗口同步刷新）
       const { BrowserWindow } = require('electron');
       for (const win of BrowserWindow.getAllWindows()) {
@@ -839,6 +853,15 @@ function registerIpc() {
   ipcMain.handle('load-settings', loadSettings);
   ipcMain.handle('save-settings', saveSettings);
 
+  // 查询系统实际的开机自启状态（以注册表为准，防止与设置文件不一致）
+  ipcMain.handle('get-auto-start', () => {
+    try {
+      return !!app.getLoginItemSettings().openAtLogin;
+    } catch (_) {
+      return false;
+    }
+  });
+
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());
   ipcMain.on('open-custom-theme', (_e, editId) => openCustomThemeWindow(editId || null));
@@ -1086,6 +1109,9 @@ app.whenReady().then(() => {
   setupAutoUpdater();
   // 启动全局键盘监听进程（常驻；Add-Type 首次编译需数秒，提前启动避免 mini 时才编译）
   startKeyMonitor();
+
+  // 同步开机自启设置到系统（默认关闭；设置开启时写入注册表）
+  loadSettings().then((s) => syncAutoStart(!!s.autoStart)).catch(() => {});
 
   // 启动后延迟几秒再检查更新，避免拖慢首次启动
   setTimeout(() => {
