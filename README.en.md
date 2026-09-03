@@ -160,7 +160,9 @@ npm run gen:icon     # regenerate app icons (src/icon.ico / icon.png)
 | `Enter` | Continue list items; newline inside code blocks; exit an empty code-block line |
 | `Shift+Enter` | Soft line break |
 | `Tab` / `Shift+Tab` | Indent / outdent |
-| `Backspace` | Delete the selected task (when not typing) |
+| `Backspace` | Delete the selected task (when not typing, with confirmation) |
+| `Ctrl+Z` | Undo note editing (custom snapshot stack with caret position restore) |
+| `Ctrl+Shift+Z` / `Ctrl+Y` | Redo note editing |
 | `Ctrl+/` | Toggle the shortcut help panel |
 
 > Editor shortcuts can be toggled and rebound individually in **Settings → Shortcuts** (must include Ctrl/Alt modifiers).
@@ -180,7 +182,7 @@ easy-txt/
 │   ├── settings.js          # Settings window logic
 │   ├── styles.css           # Global styles (themes/materials/editor/scrollbars etc.)
 │   ├── custom-theme.*       # Custom theme color window (html/js)
-│   ├── mini-gifs/           # Mini-ball animated GIFs (remi-1~4.gif, Remilia themes)
+│   ├── mini-gifs/           # Mini-ball animated GIFs (remi-1~6.gif, Remilia themes)
 │   ├── icon.ico / icon.png  # App icons
 │   └── logo-0829-1.*        # Original logo assets (not packaged)
 ├── scripts/
@@ -280,6 +282,24 @@ Outputs to `dist/`:
 **Mini-ball upgrades**
 - New mini-ball **animated style**: uses 4 uncompressed animated GIFs in rotation (only on Remilia / Remilia Night themes); in animated mode the numeric badge is hidden and the ball is a pure GIF; the animated ball is **square** (no image cropping)
 - Mini-ball **single-click** expands the main window; dragging moves the ball
+
+### 2026-09-03
+
+**Editor undo/redo**
+- Notes editor now supports **`Ctrl+Z` undo** / **`Ctrl+Shift+Z` (or `Ctrl+Y`) redo** with a custom snapshot stack (per-editor instance, up to 50 steps)
+- Undo/redo **restores caret position** to the offset at the time of the action — no more jumping to the first line
+- Formatting actions (bold / strikethrough / code block etc.) push a snapshot immediately; continuous typing is debounced (600ms) into one step
+
+**Delete confirmation**
+- `Backspace` on a selected task now shows a **confirmation dialog** with the task title; `Enter` to confirm / `Esc` to cancel
+
+**Mini-ball typing-detection GIF**
+- Mini-ball animated mode adds **global keyboard monitoring** (main-process PowerShell `GetAsyncKeyState`) — detects typing even when focus is in another app
+- Slow typing (key interval > 450ms) → switches to `remi-5.gif`; fast & sustained (interval < 250ms for > 1.5s) → switches to `remi-6.gif`; reverts to normal rotation after 2s pause
+- PowerShell process is persistent (started on app launch), per-key edge detection + `readline` line-by-line parsing; auto-restarts 3s after a crash
+
+**GIF display fix**
+- Fixed visual size inconsistency when switching between GIFs of different aspect ratios (portrait remi-1~4 / square remi-5 / landscape remi-6): changed `background-size` from `cover` to `100% 100%` for uniform stretching
 
 ---
 
