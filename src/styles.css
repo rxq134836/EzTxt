@@ -1753,7 +1753,7 @@ body.is-mini .app {
   border-radius: 0;            /* 正方形：不裁剪 GIF 画面（圆形会裁掉四角） */
   background-color: transparent; /* 去除基础规则的主题色底，GIF 透明区域露出纯透明 */
   background-image: none;        /* 背景图由 JS 设置（轮换 GIF） */
-  background-size: cover;
+  background-size: 100% 100%; /* 强制拉伸到 56×56，避免不同宽高比 GIF 切换时视觉大小变化 */
   background-position: center;
   box-shadow: none;              /* 去除半透明黑色光晕（GIF 本身透明，无需阴影） */
 }
