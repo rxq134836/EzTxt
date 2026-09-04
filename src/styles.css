@@ -1036,7 +1036,10 @@ body[data-material="acrylic"] .app {
 }
 .archive-card {
   display: flex;
-  align-items: flex-start;
+  /* 继承自 .task-card 的 flex-direction: column；
+     align-items 控制水平方向，需 stretch 让子元素(.card-main)铺满整卡宽，
+     否则 .card-main 收缩为内容宽，标题行会随备注内容伸缩 */
+  align-items: stretch;
   gap: 8px;
   padding: 10px 14px;
   transition: background 120ms ease, border-color 120ms ease;
@@ -1102,6 +1105,68 @@ body[data-material="acrylic"] .app {
   font-size: 13px;
 }
 .archive-empty-tip.hidden { display: none; }
+
+/* ========= 归档卡片「恢复待办」按钮 =========
+   按钮作为标题行(.card-title-row)的子元素，相对标题行绝对定位并垂直居中：
+   即使备注展开使卡片变高，按钮也始终与标题/时间保持同一行。
+   鼠标移入卡片时按钮从右侧滑入；点击按钮才把任务放回待办（整卡点击不再触发）。 */
+.archive-card {
+  position: relative;
+  cursor: default;
+}
+/* 有备注的归档卡片：点击卡片主体（标题行/收起区）可展开/收起备注 */
+.archive-card.is-expandable { cursor: pointer; }
+.archive-card.is-expandable .card-note { cursor: default; }
+/* 标题行作为按钮定位基准；hover 时右侧留出按钮空间 */
+.archive-card .card-title-row {
+  position: relative;
+  padding-right: 0;
+  transition: padding-right 160ms var(--ease-out);
+}
+.archive-restore-btn {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 2px;
+  transform: translateX(20px);
+  width: 64px;
+  height: auto;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 160ms var(--ease-out), opacity 160ms ease, filter 120ms ease;
+  z-index: 3;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+}
+.archive-restore-btn:hover { filter: brightness(0.88); }
+.archive-restore-btn:active { transform: translateX(0) scale(0.95); }
+/* 卡片 hover → 按钮从右侧滑入到标题行末端，标题行内容左移让位 */
+.archive-card:hover .archive-restore-btn,
+.archive-card:focus-within .archive-restore-btn {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+.archive-card:hover .card-title-row {
+  padding-right: 72px;
+}
+/* 批量选择模式下隐藏恢复按钮：整卡点击用于选择删除 */
+body.is-batch-mode .archive-restore-btn {
+  display: none;
+}
+body.is-batch-mode .archive-card:hover .card-title-row {
+  padding-right: 0;
+}
 
 /* ========= 批量删除 ========= */
 body.is-batch-mode .task-card,

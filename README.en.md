@@ -44,6 +44,7 @@ An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Mark
 
 ### To-Do List
 - **Card-based to-do list**: create / edit / check off / delete, with batch selection and a two-step delete confirmation
+- **Auto-archive on completion**: checking a task off moves it into the archive (a dedicated window groups them by date); they can be restored to the to-do list
 - **Divider grouping**: insert dividers with optional titles to organize tasks into sections
 - **Real-time search & filter**: filter tasks by keyword from the top search bar
 - **Auto-save**: global debounced auto-save (2s), `Ctrl+S` saves immediately, best-effort save on close
@@ -59,7 +60,8 @@ An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Mark
 - One-click collapse into a **desktop floating ball** from the toolbar, or drag the window to a screen edge to snap
 - Shows the pending count; click to expand, drag to move
 - **macOS Genie-style scale animation**: content shrinks toward the top-right on collapse, expands from the edge nearest the ball on release
-- The ball always uses the classic solid theme color, independent of the window material
+- **Animated ball**: switch the ball to a GIF-animated style (built-in Remilia GIF theme: idle rotation + typing-speed feedback), or upload GIFs to make your own **custom animated theme** (idle / slow-typing / fast-typing); in animated mode the numeric badge is hidden and the ball is a pure GIF
+- The ball uses the classic solid theme color, independent of the window material
 
 ### Personalization
 - **11 theme colors**: Amber / Deep Blue / Olive / Terracotta / Gold / Rose / Sage / Pure Black / Pure White / Remilia (pink-purple) / Remilia Night (deep purple)
@@ -70,6 +72,7 @@ An Electron-based local to-do and Markdown notes app: to-do cards + WYSIWYG Mark
 
 ### System Integration
 - **System tray**: closes to tray by default; tray menu shows / quits; the close-button behavior can be switched in settings (minimize to tray / quit app)
+- **Launch at startup**: auto-start EzTxt when Windows logs in (Settings → System)
 - **Always on top**: `Ctrl+Shift+T`
 - **Separate settings window**: appearance / shortcuts / close behavior / data location all managed here
 - **Customizable data location**: default local `data/` (dev) or `userData/storage` (packaged), switchable with data migration
@@ -132,11 +135,12 @@ npm run gen:icon     # regenerate app icons (src/icon.ico / icon.png)
 
 ### Basics
 1. **New task**: click the "New" button in the toolbar or press `Ctrl+N`, type a title and press Enter
-2. **Check / delete**: click the checkbox on the left to complete; "Delete" enters batch mode, then confirm to remove selected cards
+2. **Check / delete**: click the checkbox on the left to complete — the task flies into the **archive**; "Delete" enters batch mode, then confirm to remove selected cards
 3. **Notes**: click the expand arrow on the right of a card and type Markdown in the editor — WYSIWYG
 4. **Dividers**: click "Split" in the toolbar to insert a group divider with an optional title
-5. **Collapse to ball**: click "Shrink" in the toolbar to collapse the window into a floating ball (dragging to a screen edge also snaps)
-6. **Settings**: click "Settings" in the toolbar to open the separate settings window
+5. **Archive**: the "Archive" button in the toolbar (with a count badge) opens the completed-task window — browse by date, click a card to read its note, batch-delete there; hover a card to slide out the "Restore to To-Do" button and bring it back
+6. **Collapse to ball**: click "Shrink" in the toolbar to collapse the window into a floating ball (dragging to a screen edge also snaps)
+7. **Settings**: click "Settings" in the toolbar to open the separate settings window
 
 ### Data Storage
 - Default data dir: `data/` in the project (dev), `%APPDATA%\EzTxt\storage` (packaged)
@@ -173,16 +177,19 @@ npm run gen:icon     # regenerate app icons (src/icon.ico / icon.png)
 
 ```
 easy-txt/
+├── CLAUDE.md                # AI behavioral guidelines (Karpathy Guidelines, read before editing code)
 ├── src/                     # App source
-│   ├── main.js              # Electron main process: windows/tray/snap/storage/IPC
+│   ├── main.js              # Electron main process: windows/tray/snap/storage/IPC/archive/animated themes
 │   ├── preload.js           # preload: marked/turndown/highlight.js wrappers + contextBridge
-│   ├── renderer.js          # Main-window renderer: to-do list + WYSIWYG editor
+│   ├── renderer.js          # Main-window renderer: to-do list + WYSIWYG editor + archive animation
 │   ├── index.html           # Main window page
 │   ├── settings.html        # Separate settings window page
 │   ├── settings.js          # Settings window logic
-│   ├── styles.css           # Global styles (themes/materials/editor/scrollbars etc.)
+│   ├── archive.html / archive.js    # Completed-task archive window (grouped by date, restore/batch delete)
 │   ├── custom-theme.*       # Custom theme color window (html/js)
-│   ├── mini-gifs/           # Mini-ball animated GIFs (remi-1~6.gif, Remilia themes)
+│   ├── custom-gif-theme.*   # Custom mini animated-theme editor (html/js)
+│   ├── styles.css           # Global styles (themes/materials/editor/scrollbars/archive cards etc.)
+│   ├── mini-gifs/           # Built-in mini-ball GIFs (remi-1~4 idle rotation / remi-slow / remi-fast)
 │   ├── icon.ico / icon.png  # App icons
 │   └── logo-0829-1.*        # Original logo assets (not packaged)
 ├── scripts/
@@ -191,7 +198,7 @@ easy-txt/
 │   ├── uninstaller.nsh      # Custom NSIS uninstaller (clean caches, keep data)
 │   └── rcedit-x64.exe       # Icon injection tool
 ├── docs/
-│   └── UI-DESIGN-SPEC.md    # UI design spec
+│   └── UI-DESIGN-SPEC.md    # UI design spec (read before editing UI)
 ├── data/                    # Dev-mode data dir (auto-generated)
 ├── dist/                    # Build output dir (auto-generated)
 ├── .npmrc                   # npm mirror config
@@ -214,6 +221,9 @@ Settings (`settings.json`):
 | `fontSize` | Page base font size (px) |
 | `closeAction` | Close-button behavior: `tray` (minimize to tray) / `quit` (exit app) |
 | `windowSize` / `customWindowSize` | Window-ratio preset / custom size |
+| `miniBallStyle` | Mini-ball style: `classic` (solid ball) / `gif` (animated) |
+| `miniBallGif` | Mini-ball animated theme name (e.g. `remi`; GIFs auto-scanned by naming rule, custom themes supported) |
+| `autoStart` | Launch at startup (start on Windows login) |
 | `shortcuts` | Editor shortcuts (enabled flags & key bindings) |
 
 ---
@@ -293,6 +303,9 @@ Outputs to `dist/`:
 **Delete confirmation**
 - `Backspace` on a selected task now shows a **confirmation dialog** with the task title; `Enter` to confirm / `Esc` to cancel
 
+**Launch at startup**
+- New **launch at startup** option (Settings → System): auto-start EzTxt when Windows logs in, off by default
+
 **Mini-ball typing-detection GIF**
 - Mini-ball animated mode adds **global keyboard monitoring** (main-process PowerShell `GetAsyncKeyState`) — detects typing even when focus is in another app
 - Slow typing (key interval > 450ms) → switches to `remi-5.gif`; fast & sustained (interval < 250ms for > 1.5s) → switches to `remi-6.gif`; reverts to normal rotation after 2s pause
@@ -300,6 +313,28 @@ Outputs to `dist/`:
 
 **GIF display fix**
 - Fixed visual size inconsistency when switching between GIFs of different aspect ratios (portrait remi-1~4 / square remi-5 / landscape remi-6): changed `background-size` from `cover` to `100% 100%` for uniform stretching
+
+### 2026-09-04
+
+**Mini-ball animated themes**
+- The animated mini ball is no longer limited to Remilia themes — any theme can enable the "Animated" style and use GIFs
+- New **animated theme picker**: scans `mini-gifs/` and lets you choose the built-in theme (currently remi)
+- Typing-state GIF files renamed for a consistent scheme: `remi-5.gif` → `remi-slow.gif` (slow typing), `remi-6.gif` → `remi-fast.gif` (fast typing)
+
+**Custom GIF animated themes**
+- New **custom mini animated themes**: a dedicated editor lets you upload GIFs — multiple idle rotation GIFs plus one slow-typing and one fast-typing GIF each
+- Custom themes are stored in the data dir under `mini-gif-custom/` (GIF files + `custom-gif-themes.json` metadata); editable and deletable
+- In the theme picker, custom themes support **double-click to edit / delete**; all windows refresh immediately after saving
+
+**Archiving completed tasks**
+- Checking a task off **auto-archives** it: the card flies into the Archive button and leaves the to-do list
+- New standalone **Archive window** (opened from the "Archive" button on the main toolbar): completed tasks are grouped by completion date (Today / Yesterday / N days ago)
+- Archive window supports **restore to to-do** and **batch delete** (with a two-step confirmation dialog)
+- Restore interaction: hovering an archived card slides a "Restore to To-Do" button in from the right — click it to restore (clicking the card no longer triggers it); clicking the collapsed card area (title/time row) expands or collapses the read-only Markdown note
+- Archived cards use a **full-width title row**: title left, completion time right, independent of note length
+
+**UI spec addition**
+- `docs/UI-DESIGN-SPEC.md` gained **§11 Danger/delete button styling**: every delete/confirm-delete button must use `.tb-btn.danger`; inventing new danger class names is forbidden
 
 ---
 

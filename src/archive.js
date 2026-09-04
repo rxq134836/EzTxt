@@ -132,7 +132,7 @@
     const main = document.createElement('div');
     main.className = 'card-main';
 
-    // 标题行：标题左（收缩省略）+ 完成时间右 + 展开箭头（有备注时）
+    // 标题行：标题左（收缩省略）+ 展开箭头（有备注时）+ 完成时间右
     const titleRow = document.createElement('div');
     titleRow.className = 'card-title-row';
 
@@ -141,6 +141,20 @@
     title.textContent = item.title || '(无标题)';
     titleRow.appendChild(title);
 
+    // 有备注时显示展开箭头（复用首页 card-toggle 交互）
+    if (item.note) {
+      li.classList.add('is-expandable'); // 收起区可点击展开备注
+      const toggle = document.createElement('button');
+      toggle.className = 'card-toggle';
+      toggle.type = 'button';
+      toggle.dataset.action = 'toggle-expand';
+      toggle.title = '展开备注';
+      toggle.setAttribute('aria-label', '展开备注');
+      toggle.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      titleRow.appendChild(toggle);
+    }
+
+    // 完成时间：作为行内最后一个流元素 → 靠右对齐
     const meta = document.createElement('span');
     meta.className = 'archive-card-time';
     const time = item.completedAt || item.updatedAt;
@@ -153,17 +167,16 @@
     }
     titleRow.appendChild(meta);
 
-    // 有备注时显示展开箭头（复用首页 card-toggle 交互）
-    if (item.note) {
-      const toggle = document.createElement('button');
-      toggle.className = 'card-toggle';
-      toggle.type = 'button';
-      toggle.dataset.action = 'toggle-expand';
-      toggle.title = '展开备注';
-      toggle.setAttribute('aria-label', '展开备注');
-      toggle.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12"><path d="M5 3l6 5-6 5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-      titleRow.appendChild(toggle);
-    }
+    // 「恢复待办」按钮：放在标题行内（相对标题行定位），
+    // 备注展开后按钮仍与标题/时间保持同一行，不会跑到卡片中部。
+    // hover 卡片时从右侧滑入，点击才把任务放回待办。
+    const restoreBtn = document.createElement('button');
+    restoreBtn.className = 'archive-restore-btn';
+    restoreBtn.type = 'button';
+    restoreBtn.dataset.action = 'restore';
+    restoreBtn.title = '恢复为待办';
+    restoreBtn.textContent = '恢复待办';
+    titleRow.appendChild(restoreBtn);
 
     main.appendChild(titleRow);
 
@@ -185,6 +198,7 @@
     }
 
     li.appendChild(main);
+
     return li;
   }
 
@@ -275,14 +289,33 @@
   // 关闭窗口
   winClose.addEventListener('click', () => window.close());
 
-  // 列表点击：备注展开/收起、取消归档、批量选择
+  /** 点击恢复按钮：卡片淡出后取消归档 */
+  function fadeAndUnarchive(card, id) {
+    card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+    card.style.opacity = '0';
+    card.style.transform = 'scale(0.9)';
+    setTimeout(() => unarchive(id), 250);
+  }
+
+  // 列表点击：备注展开/收起、恢复待办、批量选择
   archiveListEl.addEventListener('click', (e) => {
+    // 「恢复待办」按钮：取消归档，放回待办列表
+    const restoreBtn = e.target.closest('[data-action="restore"]');
+    if (restoreBtn) {
+      if (batchMode) return; // 批量模式下按钮隐藏，防御性跳过
+      e.stopPropagation();
+      const card = restoreBtn.closest('.task-card');
+      const id = card && card.dataset.id;
+      if (id) fadeAndUnarchive(card, id);
+      return;
+    }
+
     const card = e.target.closest('.task-card');
     if (!card) return;
     const id = card.dataset.id;
     if (!id) return;
 
-    // 展开箭头：切换备注展开/收起，不触发取消归档
+    // 展开箭头：切换备注展开/收起
     const toggle = e.target.closest('[data-action="toggle-expand"]');
     if (toggle) {
       e.stopPropagation();
@@ -291,18 +324,22 @@
       return;
     }
 
-    // 备注正文区：只读，不触发取消归档（允许选择文本）
+    // 备注正文区：只读，允许选择文本
     if (e.target.closest('.card-note')) return;
 
+    // 批量模式下：整卡点击用于选择删除
     if (batchMode) {
       toggleBatchSelect(id);
       card.classList.toggle('is-batch-selected', batchSelected.has(id));
-    } else {
-      // 取消归档
-      card.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-      card.style.opacity = '0';
-      card.style.transform = 'scale(0.9)';
-      setTimeout(() => unarchive(id), 250);
+      return;
+    }
+
+    // 普通模式：点击卡片主体（标题行/收起的那部分）→ 展开/收起备注；
+    // 若卡片无备注则无动作
+    if (card.querySelector('.card-note')) {
+      const expanded = card.classList.toggle('is-expanded');
+      const arrow = card.querySelector('.card-toggle');
+      if (arrow) arrow.classList.toggle('is-expanded', expanded);
     }
   });
 

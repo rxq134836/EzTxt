@@ -174,3 +174,29 @@
 - [ ] 新增 hover 动效已包在 `(hover: hover) and (pointer: fine)` 内
 - [ ] 新 UI 有对应快捷键或键盘路径
 - [ ] 与现有 7 套主题变量（`--bg`/`--accent`/`--ink` 等）协调，无硬编码颜色
+- [ ] 危险/删除确认按钮使用 `.tb-btn.danger`，不自定义新危险类名（见 §11）
+
+---
+
+## 11. 危险/删除操作按钮样式约定（必须）
+
+**「必须」：所有「删除 / 确定删除」等危险确认按钮统一使用 `class="tb-btn danger"`**，样式由 `styles.css` 中的 `.confirm-actions .tb-btn.danger` 提供：
+
+```css
+.confirm-actions .tb-btn.danger {
+  background: var(--danger);   /* 实心危险红 */
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+```
+
+规则要点：
+
+1. **class 名必须写成 `tb-btn danger`（两个独立类）**，依赖复合选择器 `.tb-btn.danger`。
+2. **禁止自创新危险类名**（如 `btn-danger`、`delete-btn danger-red` 等）——这类类名没有对应样式，按钮会退回普通外观，危险操作不再突出。
+3. 危险按钮与「取消」并排时，危险按钮为实心红、取消按钮为常规描边样式，默认即可区分（不依赖 hover）。
+4. 使用场景：主页删除确认弹窗、设置页删除背景图确认、归档窗口批量删除确认弹窗等一律遵循本条。
+5. 若确实需要更强的视觉（图标 + 文字），在 `.tb-btn.danger` 基础上追加布局类，不要新增颜色类。
+
+> 反面案例：归档窗口曾把确认删除按钮写成 `class="tb-btn btn-danger"`，因类名不匹配 `.tb-btn.danger` 规则而未套用实心红样式（已修复）。

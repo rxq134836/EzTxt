@@ -1,6 +1,6 @@
 {
   "name": "eztxt",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "桌面便签笔记系统 - 基于 Electron 的本地 Markdown 便签",
   "main": "src/main.js",
   "author": "eztxt",
