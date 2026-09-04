@@ -22,11 +22,21 @@
   let batchSelected = new Set();
   let settings = {
     theme: 'amber',
+    material: 'opaque',
     customThemes: [],
     customThemeId: null,
     fontSize: 13,
     bgImage: null
   };
+
+  /** 应用窗口材质到 body（决定 .settings-window 实心/半透明背景 + 边框）。
+   *  与 settings.js 回退规则一致：acrylic（隐藏预留）回退 translucent。 */
+  function applyMaterial(material) {
+    let val = ['opaque', 'translucent'].includes(material) ? material : 'opaque';
+    if (material === 'acrylic') val = 'translucent';
+    settings.material = val;
+    document.body.dataset.material = val;
+  }
 
   // ===== 主题跟随 =====
   async function loadSettingsState() {
@@ -36,6 +46,7 @@
       Object.assign(settings, s);
       settings.customThemes = Array.isArray(s.customThemes) ? s.customThemes : [];
       document.body.dataset.theme = settings.theme;
+      applyMaterial(settings.material); // 材质跟随：经典实心 / 半透明
       if (settings.theme === 'custom') {
         const item = settings.customThemes.find((t) => t.id === settings.customThemeId);
         if (item && api.applyCustomThemeVars) {
