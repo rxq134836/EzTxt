@@ -30,6 +30,19 @@
 
     * { box-sizing: border-box; }
 
+    /* 滚动条跟随主题强调色（与主窗口 styles.css 视觉一致） */
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb {
+      background: rgba(var(--accent-rgb), 0.25);
+      border-radius: 6px;
+      border: 2px solid transparent;
+      background-clip: padding-box;
+    }
+    *::-webkit-scrollbar-thumb:hover { background-color: rgba(var(--accent-rgb), 0.45); }
+    *::-webkit-scrollbar-thumb:active { background-color: rgba(var(--accent-rgb), 0.6); }
+    *::-webkit-scrollbar-corner { background: transparent; }
+
     html, body {
       margin: 0;
       padding: 0;
@@ -304,6 +317,158 @@
     }
     .presets button:hover { transform: scale(1.08); }
 
+    /* JSON 一键导入 */
+    /* 标题行：左「JSON 导入」标题 + 右侧工具按钮（复制提示词 / ?） */
+    .json-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .json-head h3 { margin: 0; }
+    .json-head-tools {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    /* 标题行工具按钮：与 h3(11px) 字号一致 */
+    .json-head .btn-sm,
+    .json-head .help-btn {
+      flex-shrink: 0;
+      height: 22px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .json-head .btn-sm {
+      padding: 0 8px;
+      border-radius: 6px;
+      border: 1px solid var(--panel-line);
+      background: #fff; color: var(--panel-ink);
+      cursor: pointer;
+    }
+    .json-head .btn-sm:hover { background: #f2efe7; }
+    .json-head .btn-sm.ghost {
+      background: transparent;
+      color: var(--accent);
+      border-color: rgba(var(--accent-rgb), 0.35);
+    }
+    .json-head .btn-sm.ghost:hover { background: rgba(var(--accent-rgb), 0.08); }
+    .json-head .btn-sm.copied {
+      background: #4c8a58;
+      border-color: #4c8a58;
+      color: #fff;
+    }
+    .json-head .help-btn {
+      width: 22px;
+      border: 1px solid rgba(var(--accent-rgb), 0.4);
+      border-radius: 50%;
+      background: transparent;
+      color: var(--accent);
+      line-height: 1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .json-head .help-btn:hover { background: var(--accent); color: #fff; }
+
+    /* 输入行：粘贴输入框 + 应用按钮 */
+    .json-row { display: flex; gap: 4px; align-items: center; }
+    .json-row input[type="text"] {
+      flex: 1; min-width: 0;
+      height: 30px; padding: 0 8px;
+      border: 1px solid var(--panel-line);
+      border-radius: 6px;
+      font-family: Consolas, monospace; font-size: 11px;
+      background: #fff; color: var(--panel-ink);
+      outline: none;
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    }
+    .json-row input[type="text"]:focus {
+      border-color: #4c6b8a;
+      box-shadow: 0 0 0 2px rgba(76, 107, 138, 0.15);
+    }
+    .json-row input.error {
+      border-color: #d9534f;
+      box-shadow: 0 0 0 2px rgba(217, 83, 79, 0.15);
+    }
+    .json-row .btn-sm {
+      flex-shrink: 0;
+      height: 30px;
+      padding: 0 10px;
+      border-radius: 6px;
+      border: 1px solid var(--panel-line);
+      background: #fff; color: var(--panel-ink);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .json-row .btn-sm:hover { background: #f2efe7; }
+
+    /* 帮助弹窗 */
+    .help-mask {
+      position: absolute;
+      inset: 0;
+      z-index: 50;
+      background: rgba(40, 36, 28, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .help-mask.hidden { display: none; }
+    .help-card {
+      width: 100%;
+      max-width: 420px;
+      max-height: 100%;
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .help-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid var(--panel-line);
+    }
+    .help-title { font-size: 14px; font-weight: 700; color: var(--panel-ink); }
+    .help-close {
+      border: none;
+      background: transparent;
+      color: var(--panel-ink-soft);
+      font-size: 14px;
+      cursor: pointer;
+      width: 24px; height: 24px;
+      border-radius: 6px;
+    }
+    .help-close:hover { background: rgba(0, 0, 0, 0.06); color: var(--panel-ink); }
+    .help-body {
+      padding: 14px 18px;
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--panel-ink);
+      overflow-y: auto;
+      user-select: text;
+    }
+    .help-body ol { margin: 0; padding-left: 20px; }
+    .help-body li { margin-bottom: 6px; }
+    .help-body code {
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      background: rgba(76, 107, 138, 0.1);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    .help-tip { margin: 8px 0 0; font-size: 12px; color: var(--panel-ink-soft); }
+    .help-foot { padding: 10px 16px 14px; }
+    .help-foot .btn { max-width: 140px; margin-left: auto; }
+
     .panel .spacer { flex: 1; }
     .btn-row { display: flex; gap: 8px; }
     .btn {
@@ -315,9 +480,9 @@
     }
     .btn:hover { background: #f2efe7; }
     .btn.primary {
-      background: #4c6b8a; border-color: #4c6b8a; color: #fff;
+      background: var(--accent); border-color: var(--accent); color: #fff;
     }
-    .btn.primary:hover { background: #3e5a76; }
+    .btn.primary:hover { filter: brightness(0.88); }
     .btn.danger-ghost { color: #a05555; }
   </style>
 </head>
@@ -402,6 +567,23 @@
         <h3>快捷预设</h3>
         <div class="presets" id="presets"></div>
 
+        <!-- JSON 一键导入：粘贴 {accent,bg,ink,dark} 直接应用 -->
+        <div class="json-head">
+          <h3>JSON 导入</h3>
+          <div class="json-head-tools">
+            <button class="btn-sm ghost" id="copyPromptBtn" type="button"
+                    title="复制配色调色提示词，连同图片发给 AI 生成 JSON">复制提示词</button>
+            <button class="help-btn" id="helpBtn" type="button" title="如何使用提示词获取 JSON">?</button>
+          </div>
+        </div>
+        <div class="json-row">
+          <input type="text" id="jsonImport"
+                 placeholder='{"accent":"#ff724c","bg":"#2b2c42","ink":"#f4f4f7","dark":true}'
+                 spellcheck="false" autocomplete="off" />
+          <button class="btn-sm" id="jsonApplyBtn" type="button" title="解析并应用">应用</button>
+        </div>
+        <span class="json-error" id="jsonError"></span>
+
         <div class="spacer"></div>
         <div class="btn-row">
           <button class="btn danger-ghost" id="resetBtn">恢复默认</button>
@@ -409,8 +591,31 @@
         </div>
         <div class="btn-row">
           <button class="btn" id="cancelBtn">取消</button>
-          <button class="btn primary" id="saveBtn">保 存</button>
+          <button class="btn primary" id="saveBtn">保存并使用</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 帮助弹窗：如何使用提示词获取 JSON -->
+  <div class="help-mask hidden" id="helpMask">
+    <div class="help-card">
+      <div class="help-head">
+        <span class="help-title">如何用提示词获取配色 JSON？</span>
+        <button class="help-close" id="helpCloseBtn" type="button" title="关闭">✕</button>
+      </div>
+      <div class="help-body">
+        <ol>
+          <li>点击「复制提示词」按钮，复制调色提示词文本；</li>
+          <li>打开任意 AI 对话（ChatGPT / Claude / 其他），<b>把提示词 + 你的图片一起发过去</b>；</li>
+          <li>AI 会按提示词规则从图片中提取 accent / bg / ink / dark，并返回一段 JSON；</li>
+          <li>把 AI 返回的 JSON 粘贴到上方「JSON 导入」输入框，点「应用」即可预览；</li>
+          <li>预览满意后，填写主题名称并点「保存」，主题即应用到 EzTxt。</li>
+        </ol>
+        <p class="help-tip">提示：AI 可能夹带说明文字或代码块，粘贴前请只保留 <code>{...}</code> 花括号内的一段 JSON。</p>
+      </div>
+      <div class="help-foot">
+        <button class="btn" id="helpOkBtn" type="button">知道了</button>
       </div>
     </div>
   </div>
