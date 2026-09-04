@@ -318,11 +318,11 @@
         del.textContent = '×';
         del.addEventListener('click', (e) => {
           e.stopPropagation();
-          if (api.deleteCustomGifTheme) {
-            api.deleteCustomGifTheme(theme.name).then(() => {
-              return loadGifThemes();
-            });
-          }
+          if (!api.deleteCustomGifTheme) return;
+          // 二次确认，避免误删自定义动画主题
+          openConfirm(`确定删除动画主题「${theme.displayName || theme.name}」吗？`, () => {
+            api.deleteCustomGifTheme(theme.name).then(() => loadGifThemes());
+          });
         });
         wrap.appendChild(card);
         wrap.appendChild(del);
