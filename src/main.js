@@ -15,6 +15,7 @@ let tray = null;
 let isQuitting = false;
 let settingsWindow = null;
 let customThemeWindow = null;
+let customGifThemeWindow = null;
 // 主窗口 CSS 视口尺寸（渲染层上报 innerWidth/innerHeight，供设置窗口同步）
 let lastMainWindowSize = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
@@ -27,6 +28,8 @@ function storageConfigPath() { return path.join(app.getPath('userData'), 'storag
 function initStorageDir() { const def = defaultStorageDir(); try { const raw = readFileSync(storageConfigPath(), 'utf8').replace(/^\uFEFF/, ''); const cfg = JSON.parse(raw); if (cfg && typeof cfg.dir === 'string' && cfg.dir) { STORAGE_DIR = cfg.dir; return; } } catch (_) {} STORAGE_DIR = def; }
 function noteFile() { return path.join(STORAGE_DIR, 'note.json'); }
 function settingsFile() { return path.join(STORAGE_DIR, 'settings.json'); }
+function customGifDir() { return path.join(STORAGE_DIR, 'mini-gif-custom'); }
+function customGifMetaFile() { return path.join(STORAGE_DIR, 'custom-gif-themes.json'); }
 
 // 图标资源(多尺寸 ico 供打包,256px png 供运行时 nativeImage)
 const ICON_PATH_ICO = path.join(__dirname, 'icon.ico');
@@ -434,6 +437,57 @@ function openCustomThemeWindow(editId = null) {
     customThemeWindow = null;
   });
   customThemeWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+}
+
+// 打开自定义 GIF 动画主题编辑器窗口（editId 为空 = 新建）
+function openCustomGifThemeWindow(editId = null) {
+  if (customGifThemeWindow && !customGifThemeWindow.isDestroyed()) {
+    customGifThemeWindow.loadFile(path.join(__dirname, 'custom-gif-theme.html'), {
+      query: editId ? { id: editId } : {}
+    });
+    customGifThemeWindow.show();
+    customGifThemeWindow.focus();
+    return;
+  }
+  const winOptions = {
+    width: 600,
+    height: 560,
+    minWidth: 520,
+    minHeight: 480,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#00000000',
+    show: false,
+    title: 'EzTxt 自定义动画主题',
+    icon: ICON_PATH_PNG,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false
+    }
+  };
+  customGifThemeWindow = new BrowserWindow(winOptions);
+  customGifThemeWindow.loadFile(path.join(__dirname, 'custom-gif-theme.html'), {
+    query: editId ? { id: editId } : {}
+  });
+  customGifThemeWindow.once('ready-to-show', () => {
+    customGifThemeWindow.show();
+  });
+  customGifThemeWindow.on('closed', () => {
+    customGifThemeWindow = null;
+  });
+  customGifThemeWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
     }
@@ -863,46 +917,200 @@ function registerIpc() {
     }
   });
 
-  // 扫描 mini-gifs/ 目录，发现所有可用动画主题
-  // 命名规范：{主题名}-{序号}.gif（闲时轮换）、{主题名}-slow.gif、{主题名}-fast.gif
-  // 返回 [{ name, idle: [gif1, gif2, ...], slow, fast, thumb }]
+  // 扫描 mini-gifs/ 目录 + 自定义 GIF 目录，发现所有可用动画主题
+  // 内置命名规范：{主题名}-{序号}.gif（闲时轮换）、{主题名}-slow.gif、{主题名}-fast.gif
+  // 自定义主题：存储在 mini-gif-custom/ 下，元数据在 custom-gif-themes.json
+  // 返回 [{ name, displayName, idle: [url1, ...], slow, fast, thumb, basePath, custom }]
   ipcMain.handle('scan-gif-themes', async () => {
+    const result = [];
+    // 1. 扫描内置 mini-gifs/ 目录
     try {
       const dir = path.join(__dirname, 'mini-gifs');
-      if (!existsSync(dir)) return [];
-      const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.gif'));
-      const themes = {}; // { 主题名: { idle: [], slow: null, fast: null } }
-      for (const file of files) {
-        const base = file.slice(0, -4); // 去掉 .gif
-        const lastDash = base.lastIndexOf('-');
-        if (lastDash === -1) continue;
-        const themeName = base.slice(0, lastDash);
-        const suffix = base.slice(lastDash + 1);
-        if (!themeName) continue;
-        if (!themes[themeName]) themes[themeName] = { idle: [], slow: null, fast: null };
-        if (suffix === 'slow') {
-          themes[themeName].slow = file;
-        } else if (suffix === 'fast') {
-          themes[themeName].fast = file;
-        } else if (/^\d+$/.test(suffix)) {
-          themes[themeName].idle.push({ file, index: parseInt(suffix, 10) });
+      if (existsSync(dir)) {
+        const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.gif'));
+        const themes = {};
+        for (const file of files) {
+          const base = file.slice(0, -4);
+          const lastDash = base.lastIndexOf('-');
+          if (lastDash === -1) continue;
+          const themeName = base.slice(0, lastDash);
+          const suffix = base.slice(lastDash + 1);
+          if (!themeName) continue;
+          if (!themes[themeName]) themes[themeName] = { idle: [], slow: null, fast: null };
+          if (suffix === 'slow') themes[themeName].slow = file;
+          else if (suffix === 'fast') themes[themeName].fast = file;
+          else if (/^\d+$/.test(suffix)) themes[themeName].idle.push({ file, index: parseInt(suffix, 10) });
+        }
+        for (const [name, t] of Object.entries(themes)) {
+          if (t.idle.length === 0) continue;
+          const sorted = t.idle.sort((a, b) => a.index - b.index).map((x) => x.file);
+          result.push({
+            name,
+            displayName: name,
+            idle: sorted,
+            slow: t.slow,
+            fast: t.fast,
+            thumb: sorted[0],
+            basePath: './mini-gifs/',
+            custom: false
+          });
         }
       }
-      return Object.entries(themes)
-        .map(([name, t]) => ({
-          name,
-          idle: t.idle.sort((a, b) => a.index - b.index).map((x) => x.file),
-          slow: t.slow,
-          fast: t.fast,
-          thumb: t.idle.length > 0 ? t.idle[0].file : null,
-        }))
-        .filter((t) => t.idle.length > 0)
-        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) { console.error('扫描内置 GIF 主题失败：', err); }
+
+    // 2. 扫描自定义 mini-gif-custom/ 目录
+    try {
+      const cDir = customGifDir();
+      if (existsSync(cDir) && existsSync(customGifMetaFile())) {
+        const meta = JSON.parse((await fs.readFile(customGifMetaFile(), 'utf8')).replace(/^\uFEFF/, ''));
+        const basePath = 'file:///' + cDir.replace(/\\/g, '/') + '/';
+        for (const theme of meta) {
+          result.push({
+            name: theme.id,
+            displayName: theme.name,
+            idle: theme.idle || [],
+            slow: theme.slow || null,
+            fast: theme.fast || null,
+            thumb: (theme.idle && theme.idle.length > 0) ? theme.idle[0] : null,
+            basePath: basePath,
+            custom: true
+          });
+        }
+      }
+    } catch (err) { console.error('扫描自定义 GIF 主题失败：', err); }
+
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+  });
+
+  // 自定义 GIF 主题：文件选择对话框（返回 data URL + 文件名）
+  ipcMain.handle('select-gif-file', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: '选择 GIF 动画图片',
+        filters: [{ name: 'GIF 动画', extensions: ['gif'] }],
+        properties: ['openFile']
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      const filePath = result.filePaths[0];
+      const buffer = await fs.readFile(filePath);
+      const dataUrl = 'data:image/gif;base64,' + buffer.toString('base64');
+      return { dataUrl, name: path.basename(filePath), size: buffer.length };
     } catch (err) {
-      console.error('扫描 GIF 主题失败：', err);
-      return [];
+      console.error('选择 GIF 文件失败：', err);
+      return null;
     }
   });
+
+  // 自定义 GIF 主题：加载元数据列表
+  ipcMain.handle('load-custom-gif-themes', async () => {
+    try {
+      if (!existsSync(customGifMetaFile())) return [];
+      const raw = (await fs.readFile(customGifMetaFile(), 'utf8')).replace(/^\uFEFF/, '');
+      return JSON.parse(raw);
+    } catch (_) { return []; }
+  });
+
+  // 自定义 GIF 主题：保存（新建/编辑）
+  // data: { id?, name, idle: [dataUrl, ...], slow: dataUrl?, fast: dataUrl? }
+  // 返回 { ok, id, name }
+  ipcMain.handle('save-custom-gif-theme', async (_e, data) => {
+    try {
+      await ensureStorageDir();
+      const gifDir = customGifDir();
+      if (!existsSync(gifDir)) await fs.mkdir(gifDir, { recursive: true });
+
+      // 读取现有元数据
+      let themes = [];
+      if (existsSync(customGifMetaFile())) {
+        themes = JSON.parse((await fs.readFile(customGifMetaFile(), 'utf8')).replace(/^\uFEFF/, ''));
+      }
+
+      const id = data.id || 'ct-' + crypto.randomBytes(4).toString('hex');
+      const themeName = data.name || '自定义动画';
+
+      // 写入 GIF 文件（dataUrl → 文件）
+      async function writeGifFile(dataUrl, role, index) {
+        if (!dataUrl) return null;
+        const base64 = dataUrl.replace(/^data:image\/gif;base64,/, '');
+        const buf = Buffer.from(base64, 'base64');
+        const fileName = index != null
+          ? `${id}-${role}-${index}.gif`
+          : `${id}-${role}.gif`;
+        await fs.writeFile(path.join(gifDir, fileName), buf);
+        return fileName;
+      }
+
+      // 删除旧文件（编辑模式：先清理该 id 的旧文件）
+      const oldFiles = (await fs.readdir(gifDir)).filter((f) => f.startsWith(id + '-'));
+      for (const f of oldFiles) {
+        try { await fs.unlink(path.join(gifDir, f)); } catch (_) {}
+      }
+
+      // 写入新的闲时 GIF
+      const idleFiles = [];
+      if (Array.isArray(data.idle)) {
+        for (let i = 0; i < data.idle.length; i++) {
+          if (data.idle[i]) {
+            const fn = await writeGifFile(data.idle[i], 'idle', i + 1);
+            if (fn) idleFiles.push(fn);
+          }
+        }
+      }
+      // 写入慢速/快速 GIF
+      const slowFile = data.slow ? await writeGifFile(data.slow, 'slow') : null;
+      const fastFile = data.fast ? await writeGifFile(data.fast, 'fast') : null;
+
+      // 更新元数据
+      const metaEntry = { id, name: themeName, idle: idleFiles, slow: slowFile, fast: fastFile };
+      const existingIdx = themes.findIndex((t) => t.id === id);
+      if (existingIdx >= 0) themes[existingIdx] = metaEntry;
+      else themes.push(metaEntry);
+
+      await atomicWrite(customGifMetaFile(), JSON.stringify(themes, null, 2), 'utf8');
+
+      // 通知设置窗口刷新
+      const { BrowserWindow } = require('electron');
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('settings-changed');
+      }
+
+      return { ok: true, id, name: themeName };
+    } catch (err) {
+      console.error('保存自定义 GIF 主题失败：', err);
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // 自定义 GIF 主题：删除
+  ipcMain.handle('delete-custom-gif-theme', async (_e, id) => {
+    try {
+      const gifDir = customGifDir();
+      // 删除该主题的所有文件
+      if (existsSync(gifDir)) {
+        const oldFiles = (await fs.readdir(gifDir)).filter((f) => f.startsWith(id + '-'));
+        for (const f of oldFiles) {
+          try { await fs.unlink(path.join(gifDir, f)); } catch (_) {}
+        }
+      }
+      // 从元数据中移除
+      if (existsSync(customGifMetaFile())) {
+        let themes = JSON.parse((await fs.readFile(customGifMetaFile(), 'utf8')).replace(/^\uFEFF/, ''));
+        themes = themes.filter((t) => t.id !== id);
+        await atomicWrite(customGifMetaFile(), JSON.stringify(themes, null, 2), 'utf8');
+      }
+      const { BrowserWindow } = require('electron');
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send('settings-changed');
+      }
+      return { ok: true };
+    } catch (err) {
+      console.error('删除自定义 GIF 主题失败：', err);
+      return { ok: false, error: String(err) };
+    }
+  });
+
+  // 打开自定义 GIF 主题编辑器窗口
+  ipcMain.on('open-custom-gif-theme', (_e, editId) => openCustomGifThemeWindow(editId || null));
 
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());

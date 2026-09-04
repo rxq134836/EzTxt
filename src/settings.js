@@ -18,6 +18,7 @@
   const autoStartSwitchEl = $('#autoStartSwitch');
   const gifThemePickerEl = $('#gifThemePicker');
   const gifThemeGridEl = $('#gifThemeGrid');
+  const btnAddGifTheme = $('#btnAddGifTheme');
   const windowSizeOptionsEl = $('#windowSizeOptions');
   const miniBallStyleOptionsEl = $('#miniBallStyleOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
@@ -290,18 +291,45 @@
     if (!gifThemeGridEl) return;
     gifThemeGridEl.innerHTML = '';
     for (const theme of gifThemes) {
+      const wrap = document.createElement('div');
+      wrap.className = 'gif-theme-wrap';
       const card = document.createElement('button');
       card.className = 'gif-theme-card';
       card.type = 'button';
       card.dataset.gifTheme = theme.name;
+      // 缩略图用完整 URL（内置 = 相对路径，自定义 = file:// 绝对路径）
       if (theme.thumb) {
-        card.style.backgroundImage = `url(./mini-gifs/${theme.thumb})`;
+        card.style.backgroundImage = `url(${theme.basePath ? theme.basePath + theme.thumb : './mini-gifs/' + theme.thumb})`;
       }
       const label = document.createElement('span');
       label.className = 'gif-theme-label';
-      label.textContent = theme.name;
+      label.textContent = theme.displayName || theme.name;
       card.appendChild(label);
-      gifThemeGridEl.appendChild(card);
+      // 自定义主题：双击编辑
+      if (theme.custom) {
+        card.addEventListener('dblclick', () => api.openCustomGifTheme(theme.name));
+      }
+      // 自定义主题：删除角标
+      if (theme.custom) {
+        const del = document.createElement('button');
+        del.className = 'gif-theme-del';
+        del.type = 'button';
+        del.title = `删除「${theme.displayName}」`;
+        del.textContent = '×';
+        del.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (api.deleteCustomGifTheme) {
+            api.deleteCustomGifTheme(theme.name).then(() => {
+              return loadGifThemes();
+            });
+          }
+        });
+        wrap.appendChild(card);
+        wrap.appendChild(del);
+      } else {
+        wrap.appendChild(card);
+      }
+      gifThemeGridEl.appendChild(wrap);
     }
     // 更新选中状态
     gifThemeGridEl.querySelectorAll('.gif-theme-card').forEach((card) => {
@@ -999,6 +1027,11 @@
     gifThemeGridEl.addEventListener('click', (e) => {
       const card = e.target.closest('.gif-theme-card');
       if (card && card.dataset.gifTheme) onGifThemeSelect(card.dataset.gifTheme);
+    });
+  }
+  if (btnAddGifTheme) {
+    btnAddGifTheme.addEventListener('click', () => {
+      if (api.openCustomGifTheme) api.openCustomGifTheme(null);
     });
   }
   windowSizeOptionsEl.addEventListener('click', (e) => {

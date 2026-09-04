@@ -263,6 +263,13 @@ contextBridge.exposeInMainWorld('api', {
   // 扫描 mini-gifs/ 目录，返回所有可用动画主题列表
   scanGifThemes: () => ipcRenderer.invoke('scan-gif-themes'),
 
+  // 自定义 GIF 动画主题
+  openCustomGifTheme: (editId) => ipcRenderer.send('open-custom-gif-theme', editId || null),
+  loadCustomGifThemes: () => ipcRenderer.invoke('load-custom-gif-themes'),
+  saveCustomGifTheme: (data) => ipcRenderer.invoke('save-custom-gif-theme', data),
+  deleteCustomGifTheme: (id) => ipcRenderer.invoke('delete-custom-gif-theme', id),
+  selectGifFile: () => ipcRenderer.invoke('select-gif-file'),
+
   // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
   setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 

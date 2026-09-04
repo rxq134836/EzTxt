@@ -1772,8 +1772,10 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     }
   }
 
-  /** GIF 资源路径（打包后相对 app 目录；开发时相对项目根） */
+  /** GIF 资源路径（内置主题用相对路径，自定义主题用 basePath 前缀） */
   function miniGifUrl(name) {
+    const theme = currentGifTheme();
+    if (theme && theme.basePath) return theme.basePath + name;
     return './mini-gifs/' + name;
   }
 

@@ -1830,3 +1830,47 @@ body.is-mini .app {
   padding: 1px 0;
   line-height: 1.2;
 }
+
+/* 自定义主题删除角标 */
+.gif-theme-wrap {
+  position: relative;
+}
+.gif-theme-del {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: #e05040;
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+  padding: 0;
+}
+.gif-theme-del:hover {
+  background: #c04030;
+}
+
+/* 新建动画主题按钮 */
+.gif-theme-add-btn {
+  margin-top: 10px;
+  padding: 6px 16px;
+  border: 1px dashed rgba(var(--ink-rgb), 0.25);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease;
+}
+.gif-theme-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
