@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<!-- 归档窗口：查看已完成任务，按日期分组 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: file:;" />
+  <title>EzTxt 归档</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body data-theme="amber">
+  <div class="settings-window">
+    <!-- 标题栏 -->
+    <header class="settings-win-header">
+      <h1>已完成任务</h1>
+      <button class="ctrl-btn close-btn" id="winClose" title="关闭" type="button">
+        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+          <path d="M3.7 3.7 L12.3 12.3 M12.3 3.7 L3.7 12.3"
+            stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+        </svg>
+      </button>
+    </header>
+
+    <!-- 工具栏 -->
+    <div class="archive-toolbar">
+      <button class="tb-btn" id="btnBatchMode" type="button" title="批量选择">
+        <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 6h6M5 8.5h6M5 11h3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+        <span id="batchModeLabel">批量选择</span>
+      </button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn danger hidden is-disabled" id="btnBatchDelete" type="button" title="删除选中">
+        <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 5h10M6 5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M4 5l.7 9a1 1 0 0 0 1 1h4.6a1 1 0 0 0 1-1L12 5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span id="batchDeleteLabel">删除</span>
+      </button>
+    </div>
+
+    <!-- 列表区 -->
+    <main class="archive-body">
+      <div class="archive-empty-tip hidden" id="archiveEmptyTip">
+        <p>暂无已完成的任务</p>
+      </div>
+      <ul class="archive-list" id="archiveList"></ul>
+    </main>
+  </div>
+
+  <!-- 批量删除确认弹窗 -->
+  <div class="confirm-mask hidden" id="confirmMask">
+    <div class="confirm-card">
+      <h3>确认删除</h3>
+      <p class="confirm-text" id="confirmText"></p>
+      <div class="confirm-actions">
+        <button class="tb-btn" id="btnConfirmCancel" type="button">取消</button>
+        <button class="tb-btn btn-danger" id="btnConfirmOk" type="button">确定删除</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="archive.js"></script>
+</body>
+</html>

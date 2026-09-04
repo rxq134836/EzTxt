@@ -92,6 +92,14 @@
 
     <!-- 状态栏 -->
     <footer class="statusbar">
+      <button class="archive-btn" id="btnArchive" title="已完成任务归档" type="button">
+        <svg class="archive-icon" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="2" width="12" height="3" rx="0.5" />
+          <path d="M3 5.5v8.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V5.5" />
+          <path d="M6.5 8.5h3" />
+        </svg>
+        <span class="archive-badge hidden" id="archiveBadge">0</span>
+      </button>
       <span class="status-dot" id="statusDot" aria-hidden="true"></span>
       <span class="status-text" id="statusText">就绪</span>
       <span class="spacer"></span>

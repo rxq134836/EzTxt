@@ -50,6 +50,8 @@
   const confirmText = $('#confirmText');
   const btnConfirmOk = $('#btnConfirmOk');
   const btnConfirmCancel = $('#btnConfirmCancel');
+  const btnArchive = $('#btnArchive');
+  const archiveBadge = $('#archiveBadge');
 
   // ===== 应用状态 =====
   /**
@@ -611,6 +613,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     taskListEl.innerHTML = '';
     const frag = document.createDocumentFragment();
     for (const item of items) {
+      if (item.archived) continue; // 归档项不在主列表显示
       frag.appendChild(createCardEl(item));
     }
     taskListEl.appendChild(frag);
@@ -618,6 +621,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     updateSummary();
     applyFilter();
     updateEmptyTip();
+    updateArchiveBadge();
   }
 
   // ============================================================
@@ -704,6 +708,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     const q = activeSearch.trim().toLowerCase();
     let anyVisible = false;
     for (const item of items) {
+      if (item.archived) continue; // 归档项不在主列表显示
       if (item.title === '__DIVIDER__') continue;
       const el = cardElById(item.id);
       if (!el) continue;
@@ -850,9 +855,87 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   function toggleDone(id) {
     const it = findItem(id);
     if (!it) return;
-    updateItem(id, { done: !it.done, updatedAt: new Date().toISOString() });
-    updateCardDoneDom(id);
-    updateSummary();
+    const now = new Date().toISOString();
+    if (!it.done) {
+      // 标记完成 → 飞入归档动画 → 设置 archived
+      animateCardToArchive(id, () => {
+        updateItem(id, { done: true, archived: true, completedAt: now, updatedAt: now });
+        removeCardEl(id);
+        updateSummary();
+        updateArchiveBadge();
+        // 立即保存，确保归档窗口能及时收到 note-changed
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+        performSave();
+      });
+    } else {
+      // 取消完成（归档项不在主列表显示，此分支极少触发）
+      updateItem(id, { done: false, archived: false, completedAt: null, updatedAt: now });
+      updateCardDoneDom(id);
+      updateSummary();
+      updateArchiveBadge();
+    }
+  }
+
+  /**
+   * 卡片飞入归档动画：
+   * 1. 克隆卡片 → fixed 定位到原位
+   * 2. 计算到归档图标的位移
+   * 3. CSS transition cubic-bezier 飞入 → 缩小 + 淡出
+   * 4. 动画结束 → 移除克隆 + 原卡片 → 回调
+   */
+  function animateCardToArchive(id, onDone) {
+    const el = cardElById(id);
+    if (!el) { onDone(); return; }
+    if (!btnArchive) { onDone(); return; }
+
+    const rect = el.getBoundingClientRect();
+    const clone = el.cloneNode(true);
+    clone.classList.add('archive-fly-clone');
+    clone.style.left = rect.left + 'px';
+    clone.style.top = rect.top + 'px';
+    clone.style.width = rect.width + 'px';
+    document.body.appendChild(clone);
+
+    // 隐藏原卡片（保持布局不塌陷）
+    el.style.visibility = 'hidden';
+
+    // 计算到归档图标中心的位移
+    const iconRect = btnArchive.getBoundingClientRect();
+    const dx = (iconRect.left + iconRect.width / 2) - (rect.left + rect.width / 2);
+    const dy = (iconRect.top + iconRect.height / 2) - (rect.top + rect.height / 2);
+
+    // 强制 reflow 确保初始位置生效
+    void clone.getBoundingClientRect();
+
+    // 触发飞行动画
+    clone.style.setProperty('--fly-dx', dx + 'px');
+    clone.style.setProperty('--fly-dy', dy + 'px');
+    clone.classList.add('flying');
+
+    // 归档图标脉冲
+    btnArchive.classList.add('is-pulse');
+    setTimeout(() => btnArchive.classList.remove('is-pulse'), 400);
+
+    // transitionend / 兜底定时器
+    let finished = false;
+    function finish() {
+      if (finished) return;
+      finished = true;
+      clone.remove();
+      el.remove();
+      onDone();
+    }
+    clone.addEventListener('transitionend', finish, { once: true });
+    setTimeout(finish, 600);
+  }
+
+  /** 更新归档角标数量 */
+  function updateArchiveBadge() {
+    const n = items.filter((it) => it.archived).length;
+    if (archiveBadge) {
+      archiveBadge.textContent = String(n);
+      archiveBadge.classList.toggle('hidden', n === 0);
+    }
   }
 
   function updateTitle(id, title) {
@@ -1995,6 +2078,28 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       toggleHelp(false);
       api.openSettings();
     });
+
+    // 归档按钮：打开归档窗口
+    if (btnArchive) {
+      btnArchive.addEventListener('click', () => api.openArchive());
+    }
+
+    // 其他窗口修改了笔记数据 → 刷新主列表（如果非编辑状态）
+    if (api.onNoteChanged) {
+      api.onNoteChanged(() => {
+        // 如果正在编辑（有展开的卡片），跳过本次刷新避免打断用户
+        const anyExpanded = items.some((it) => it.expanded && !it.archived);
+        if (!anyExpanded) {
+          loadInitial();
+        } else {
+          // 仅更新归档角标
+          api.loadNote().then((doc) => {
+            items = doc.items || [];
+            updateArchiveBadge();
+          });
+        }
+      });
+    }
 
     // Mini bar: 用 JS 区分点击 vs 拖动(原生 drag region 已移除)
     // 方案: pointer events + screen 坐标 + pointer capture

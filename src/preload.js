@@ -300,6 +300,8 @@ contextBridge.exposeInMainWorld('api', {
   openSettings: () => ipcRenderer.send('open-settings'),
   // 打开自定义主题编辑器窗口（editId 空=新建；传 id=编辑已有主题）
   openCustomTheme: (editId) => ipcRenderer.send('open-custom-theme', editId || null),
+  // 打开归档窗口
+  openArchive: () => ipcRenderer.send('open-archive'),
 
   // ===== 自定义主题 =====
   // 由 {accent, bg, ink, dark} 派生完整 CSS 变量对象（key 不带 -- 前缀）
@@ -323,6 +325,13 @@ contextBridge.exposeInMainWorld('api', {
     const listener = () => callback();
     ipcRenderer.on('settings-changed', listener);
     return () => ipcRenderer.removeListener('settings-changed', listener);
+  },
+
+  // 笔记数据被其他窗口修改时（主进程广播 note-changed）
+  onNoteChanged: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on('note-changed', listener);
+    return () => ipcRenderer.removeListener('note-changed', listener);
   },
 
   // 数据保存位置

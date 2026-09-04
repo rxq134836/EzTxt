@@ -16,6 +16,7 @@ let isQuitting = false;
 let settingsWindow = null;
 let customThemeWindow = null;
 let customGifThemeWindow = null;
+let archiveWindow = null;
 // 主窗口 CSS 视口尺寸（渲染层上报 innerWidth/innerHeight，供设置窗口同步）
 let lastMainWindowSize = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
@@ -70,6 +71,8 @@ function migrateIfNeeded(data) {
       createdAt: typeof it?.createdAt === 'string' ? it.createdAt : now,
       updatedAt: typeof it?.updatedAt === 'string' ? it.updatedAt : now,
       label: typeof it?.label === 'string' ? it.label : '',  // 分割线可选标题
+      archived: !!it?.archived,
+      completedAt: typeof it?.completedAt === 'string' ? it.completedAt : (it?.archived ? now : null),
       _idx: idx
     }));
     return data;
@@ -142,6 +145,8 @@ function saveNote(_, doc) {
         createdAt: typeof it?.createdAt === 'string' ? it.createdAt : now,
         updatedAt: typeof it?.updatedAt === 'string' ? it.updatedAt : now,
         label: typeof it?.label === 'string' ? it.label : '',  // 分割线可选标题
+        archived: !!it?.archived,
+        completedAt: typeof it?.completedAt === 'string' ? it.completedAt : (it?.archived ? now : null),
         _idx: idx
       }));
 
@@ -488,6 +493,51 @@ function openCustomGifThemeWindow(editId = null) {
     customGifThemeWindow = null;
   });
   customGifThemeWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+}
+
+// 打开归档窗口（查看已完成任务）
+function openArchiveWindow() {
+  if (archiveWindow && !archiveWindow.isDestroyed()) {
+    archiveWindow.show();
+    archiveWindow.focus();
+    return;
+  }
+  archiveWindow = new BrowserWindow({
+    width: 480,
+    height: 620,
+    minWidth: 400,
+    minHeight: 480,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#00000000',
+    show: false,
+    title: 'EzTxt 归档',
+    icon: ICON_PATH_PNG,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false
+    }
+  });
+  archiveWindow.loadFile(path.join(__dirname, 'archive.html'));
+  archiveWindow.once('ready-to-show', () => {
+    archiveWindow.show();
+  });
+  archiveWindow.on('closed', () => {
+    archiveWindow = null;
+  });
+  archiveWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
     }
@@ -904,7 +954,18 @@ function createTray() {
 
 function registerIpc() {
   ipcMain.handle('load-note', loadNote);
-  ipcMain.handle('save-note', saveNote);
+  // 包装 save-note：保存成功后广播 note-changed 给其他窗口
+  ipcMain.handle('save-note', async (event, doc) => {
+    const result = await saveNote(event, doc);
+    if (result && result.ok) {
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (w !== event.sender && !w.isDestroyed()) {
+          w.webContents.send('note-changed');
+        }
+      }
+    }
+    return result;
+  });
   ipcMain.handle('load-settings', loadSettings);
   ipcMain.handle('save-settings', saveSettings);
 
@@ -1115,6 +1176,8 @@ function registerIpc() {
   // 打开独立的设置窗口
   ipcMain.on('open-settings', () => openSettingsWindow());
   ipcMain.on('open-custom-theme', (_e, editId) => openCustomThemeWindow(editId || null));
+  // 打开归档窗口
+  ipcMain.on('open-archive', () => openArchiveWindow());
 
   // 窗口材质（经典 / 半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
   // 透明窗口上 DWM 不渲染 backdrop material（Electron #48031），以 CSS 磨砂效果为主
