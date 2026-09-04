@@ -212,7 +212,8 @@ const DEFAULT_SETTINGS = {
   closeAction: 'tray',    // 主窗口关闭按钮行为：tray（缩小到托盘）/ quit（退出软件）
   windowSize: 'default',  // 主窗口尺寸预设（见 WINDOW_SIZES；'custom' 用 customWindowSize）
   customWindowSize: { width: 560, height: 620 }, // 自定义窗口尺寸（窗口比例 → 自定义）
-  miniBallStyle: 'classic', // mini 球风格：classic（经典圆球）/ gif（蕾米埃尔动画）
+  miniBallStyle: 'classic', // mini 球风格：classic（经典圆球）/ gif（动画）
+  miniBallGif: 'remi',     // mini 球动画主题名（扫描 mini-gifs/ 目录自动发现）
   autoStart: false,         // 开机自启（Windows 登录时自动启动 EzTxt）
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
@@ -859,6 +860,47 @@ function registerIpc() {
       return !!app.getLoginItemSettings().openAtLogin;
     } catch (_) {
       return false;
+    }
+  });
+
+  // 扫描 mini-gifs/ 目录，发现所有可用动画主题
+  // 命名规范：{主题名}-{序号}.gif（闲时轮换）、{主题名}-slow.gif、{主题名}-fast.gif
+  // 返回 [{ name, idle: [gif1, gif2, ...], slow, fast, thumb }]
+  ipcMain.handle('scan-gif-themes', async () => {
+    try {
+      const dir = path.join(__dirname, 'mini-gifs');
+      if (!existsSync(dir)) return [];
+      const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.gif'));
+      const themes = {}; // { 主题名: { idle: [], slow: null, fast: null } }
+      for (const file of files) {
+        const base = file.slice(0, -4); // 去掉 .gif
+        const lastDash = base.lastIndexOf('-');
+        if (lastDash === -1) continue;
+        const themeName = base.slice(0, lastDash);
+        const suffix = base.slice(lastDash + 1);
+        if (!themeName) continue;
+        if (!themes[themeName]) themes[themeName] = { idle: [], slow: null, fast: null };
+        if (suffix === 'slow') {
+          themes[themeName].slow = file;
+        } else if (suffix === 'fast') {
+          themes[themeName].fast = file;
+        } else if (/^\d+$/.test(suffix)) {
+          themes[themeName].idle.push({ file, index: parseInt(suffix, 10) });
+        }
+      }
+      return Object.entries(themes)
+        .map(([name, t]) => ({
+          name,
+          idle: t.idle.sort((a, b) => a.index - b.index).map((x) => x.file),
+          slow: t.slow,
+          fast: t.fast,
+          thumb: t.idle.length > 0 ? t.idle[0].file : null,
+        }))
+        .filter((t) => t.idle.length > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    } catch (err) {
+      console.error('扫描 GIF 主题失败：', err);
+      return [];
     }
   });
 

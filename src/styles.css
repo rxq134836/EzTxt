@@ -1783,3 +1783,50 @@ body.is-mini .app {
   color: var(--ink-soft);
   margin-top: 1px;
 }
+
+/* ===== GIF 动画主题选择器（设置页） ===== */
+.gif-theme-picker {
+  margin-top: 12px;
+}
+.gif-theme-picker.hidden {
+  display: none;
+}
+.gif-theme-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.gif-theme-card {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  border: 2px solid rgba(var(--ink-rgb), 0.15);
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 150ms ease, transform 150ms ease;
+  padding: 0;
+}
+.gif-theme-card:hover {
+  transform: scale(1.08);
+  border-color: var(--accent);
+}
+.gif-theme-card.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.gif-theme-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  font-size: 9px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 1px 0;
+  line-height: 1.2;
+}

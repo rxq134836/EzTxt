@@ -260,6 +260,9 @@ contextBridge.exposeInMainWorld('api', {
   // 开机自启：查询系统实际状态（保存走 saveSettings({ autoStart })）
   getAutoStart: () => ipcRenderer.invoke('get-auto-start'),
 
+  // 扫描 mini-gifs/ 目录，返回所有可用动画主题列表
+  scanGifThemes: () => ipcRenderer.invoke('scan-gif-themes'),
+
   // 窗口材质（半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）
   setWindowMaterial: (material) => ipcRenderer.send('set-window-material', material),
 

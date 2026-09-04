@@ -1693,6 +1693,7 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       applyBgImage(settings.bgImage);
       applyFontSize(settings.fontSize);    // 应用页面字号（--font-size 变量）
       updateCloseButtonTitle();            // 关闭按钮提示跟随设置
+      await loadGifThemes();               // 加载 GIF 动画主题列表
       if (api.setWindowSize) {
         if (settings.windowSize === 'custom' && settings.customWindowSize) {
           api.setWindowSize('custom', settings.customWindowSize); // 自定义尺寸
@@ -1719,15 +1720,32 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     miniCount.textContent = String(pending);
   }
 
-  // ===== mini 球动画模式（蕾米埃尔 GIF 轮换 + 待办提示） =====
-  const MINI_GIFS = ['remi-1.gif', 'remi-2.gif', 'remi-3.gif', 'remi-4.gif'];
-  let miniGifIndex = 0;        // 当前轮换到的 GIF
+  // ===== mini 球动画模式（GIF 主题轮换 + 打字状态切换） =====
+  // 主题由 settings.miniBallGif 指定（如 'remi'），从 mini-gifs/ 目录扫描发现
+  // 命名规范：{主题}-{序号}.gif（闲时轮换）、{主题}-slow.gif、{主题}-fast.gif
+  let miniGifThemes = [];      // 从主进程扫描的动画主题列表
+  let miniGifIndex = 0;        // 当前轮换到的闲时 GIF 索引
 
-  /** 当前是否启用 GIF 动画球（设置开启 + 主题为蕾米埃尔系） */
+  /** 当前是否启用 GIF 动画球（设置开启动画即可，不再绑定颜色主题） */
   function isMiniGifActive() {
-    if (settings.miniBallStyle !== 'gif') return false;
-    const theme = settings.theme;
-    return theme === 'remi' || theme === 'remi-night';
+    return settings.miniBallStyle === 'gif';
+  }
+
+  /** 获取当前选中主题的数据 */
+  function currentGifTheme() {
+    const name = settings.miniBallGif || 'remi';
+    return miniGifThemes.find((t) => t.name === name) || miniGifThemes[0] || null;
+  }
+
+  /** 加载 GIF 主题列表（从主进程扫描 mini-gifs/ 目录） */
+  async function loadGifThemes() {
+    try {
+      if (api.scanGifThemes) {
+        miniGifThemes = await api.scanGifThemes();
+      }
+    } catch (_) {
+      miniGifThemes = [];
+    }
   }
 
   /** 进入 mini 时应用 GIF 背景（轮换取下一个；打字状态优先） */
@@ -1737,13 +1755,19 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       miniBar.style.backgroundImage = '';
       return;
     }
+    const theme = currentGifTheme();
+    if (!theme || theme.idle.length === 0) {
+      miniBar.classList.remove('is-gif');
+      miniBar.style.backgroundImage = '';
+      return;
+    }
     miniBar.classList.add('is-gif');
     if (currentTypingGif) {
-      // 打字状态 gif 优先（remi-5 慢 / remi-6 快）
+      // 打字状态 gif 优先（slow 慢 / fast 快）
       miniBar.style.backgroundImage = `url(${miniGifUrl(currentTypingGif)})`;
     } else {
-      const gif = MINI_GIFS[miniGifIndex % MINI_GIFS.length];
-      miniGifIndex = (miniGifIndex + 1) % MINI_GIFS.length;
+      const gif = theme.idle[miniGifIndex % theme.idle.length];
+      miniGifIndex = (miniGifIndex + 1) % theme.idle.length;
       miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
     }
   }
@@ -1753,14 +1777,12 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     return './mini-gifs/' + name;
   }
 
-  // ===== 打字状态 GIF（蕾米埃尔主题 + 动画模式时，编辑器/标题输入触发） =====
-  // 慢速打字 → remi-5.gif；快速持续打字 → remi-6.gif；暂停 2s → 恢复轮换 gif
-  const MINI_GIF_SLOW = 'remi-5.gif';
-  const MINI_GIF_FAST = 'remi-6.gif';
+  // ===== 打字状态 GIF（动画模式时，全局键盘监听触发） =====
+  // 慢速打字 → {主题}-slow.gif；快速持续打字 → {主题}-fast.gif；暂停 2s → 恢复轮换 gif
   const TYPE_PAUSE_REVERT_MS = 2000;  // 暂停 2 秒后恢复
   const TYPE_FAST_INTERVAL = 250;     // 按键间隔 < 250ms 算快
   const TYPE_SLOW_INTERVAL = 450;    // 按键间隔 > 450ms 算慢
-  const TYPE_SUSTAINED_MS = 1500;   // 快速持续 > 1.5 秒才切 remi-6
+  const TYPE_SUSTAINED_MS = 1500;   // 快速持续 > 1.5 秒才切 fast
   const TYPE_WINDOW_SIZE = 15;       // 滑动窗口：最近 15 次按键
 
   let typeKeystrokes = [];      // 最近的按键时间戳
@@ -1777,6 +1799,8 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   /** 编辑器按键时调用：追踪打字速度并切换 gif */
   function onEditorTyping() {
     if (!isMiniGifActive()) return; // 非 gif 模式不追踪
+    const theme = currentGifTheme();
+    if (!theme) return;
     const now = Date.now();
     typeKeystrokes.push(now);
     if (typeKeystrokes.length > TYPE_WINDOW_SIZE) typeKeystrokes.shift();
@@ -1789,11 +1813,11 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       const avgInterval = span / (typeKeystrokes.length - 1);
 
       if (avgInterval < TYPE_FAST_INTERVAL && span > TYPE_SUSTAINED_MS) {
-        // 快速且持续 → remi-6
-        setTypingGif(MINI_GIF_FAST);
+        // 快速且持续 → fast gif
+        if (theme.fast) setTypingGif(theme.fast);
       } else if (avgInterval > TYPE_SLOW_INTERVAL) {
-        // 慢速 → remi-5
-        setTypingGif(MINI_GIF_SLOW);
+        // 慢速 → slow gif
+        if (theme.slow) setTypingGif(theme.slow);
       }
       // 介于之间 → 保持当前 gif
     }
@@ -1817,9 +1841,12 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     currentTypingGif = null;
     typeKeystrokes = [];
     if (isMiniGifActive() && !miniBar.classList.contains('hidden')) {
-      const gif = MINI_GIFS[miniGifIndex % MINI_GIFS.length];
-      miniGifIndex = (miniGifIndex + 1) % MINI_GIFS.length;
-      miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+      const theme = currentGifTheme();
+      if (theme && theme.idle.length > 0) {
+        const gif = theme.idle[miniGifIndex % theme.idle.length];
+        miniGifIndex = (miniGifIndex + 1) % theme.idle.length;
+        miniBar.style.backgroundImage = `url(${miniGifUrl(gif)})`;
+      }
     }
   }
 

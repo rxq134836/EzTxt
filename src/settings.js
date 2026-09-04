@@ -16,6 +16,8 @@
   const materialOptionsEl = $('#materialOptions');
   const closeActionOptionsEl = $('#closeActionOptions');
   const autoStartSwitchEl = $('#autoStartSwitch');
+  const gifThemePickerEl = $('#gifThemePicker');
+  const gifThemeGridEl = $('#gifThemeGrid');
   const windowSizeOptionsEl = $('#windowSizeOptions');
   const miniBallStyleOptionsEl = $('#miniBallStyleOptions');
   const bgOpacityBlock = $('#bgOpacityBlock');
@@ -37,7 +39,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', autoStart: false, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', miniBallGif: 'remi', autoStart: false, shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -246,11 +248,14 @@
     api.saveSettings({ autoStart: settings.autoStart });
   }
 
-  // ===== mini 球风格（经典 / 动画） =====
+  // ===== mini 球风格（经典 / 动画） + 动画主题选择 =====
+  let gifThemes = []; // 从主进程扫描得到的动画主题列表
+
   function applyMiniBallStyle(style) {
     const val = style === 'gif' ? 'gif' : 'classic';
     settings.miniBallStyle = val;
     renderMiniBallStyleOptions();
+    updateGifThemePicker();
   }
 
   function renderMiniBallStyleOptions() {
@@ -265,6 +270,63 @@
     if (style === settings.miniBallStyle) return;
     applyMiniBallStyle(style);
     api.saveSettings({ miniBallStyle: settings.miniBallStyle });
+  }
+
+  /** 加载 GIF 动画主题列表（从 mini-gifs/ 目录扫描） */
+  async function loadGifThemes() {
+    try {
+      if (api.scanGifThemes) {
+        gifThemes = await api.scanGifThemes();
+      }
+    } catch (_) {
+      gifThemes = [];
+    }
+    renderGifThemes();
+    updateGifThemePicker();
+  }
+
+  /** 渲染动画主题缩略图网格 */
+  function renderGifThemes() {
+    if (!gifThemeGridEl) return;
+    gifThemeGridEl.innerHTML = '';
+    for (const theme of gifThemes) {
+      const card = document.createElement('button');
+      card.className = 'gif-theme-card';
+      card.type = 'button';
+      card.dataset.gifTheme = theme.name;
+      if (theme.thumb) {
+        card.style.backgroundImage = `url(./mini-gifs/${theme.thumb})`;
+      }
+      const label = document.createElement('span');
+      label.className = 'gif-theme-label';
+      label.textContent = theme.name;
+      card.appendChild(label);
+      gifThemeGridEl.appendChild(card);
+    }
+    // 更新选中状态
+    gifThemeGridEl.querySelectorAll('.gif-theme-card').forEach((card) => {
+      const active = card.dataset.gifTheme === settings.miniBallGif;
+      card.classList.toggle('is-active', active);
+      card.setAttribute('aria-pressed', String(active));
+    });
+  }
+
+  /** 选"动画"时显示主题选择器，选"经典"时隐藏 */
+  function updateGifThemePicker() {
+    if (!gifThemePickerEl) return;
+    gifThemePickerEl.classList.toggle('hidden', settings.miniBallStyle !== 'gif');
+  }
+
+  function onGifThemeSelect(themeName) {
+    if (themeName === settings.miniBallGif) return;
+    settings.miniBallGif = themeName;
+    renderGifThemes();
+    api.saveSettings({ miniBallGif: settings.miniBallGif });
+  }
+
+  /** 应用动画主题选择（仅更新设置值，渲染层实际应用在 enterMiniMode） */
+  function applyMiniBallGif(name) {
+    settings.miniBallGif = name || 'remi';
   }
 
   // ===== 主窗口尺寸预设（外观 → 窗口比例） =====
@@ -792,6 +854,8 @@
         }).catch(() => {});
       }
       applyMiniBallStyle(settings.miniBallStyle); // mini 球风格
+      applyMiniBallGif(settings.miniBallGif);     // mini 球动画主题
+      loadGifThemes(); // 扫描 mini-gifs/ 目录加载动画主题
       applyWindowSize(settings.windowSize);   // 窗口比例预设
       bgOpacitySlider.value = String(settings.bgOpacity);
       bgOpacityValueEl.textContent = Number(settings.bgOpacity).toFixed(2);
@@ -931,6 +995,12 @@
     const btn = e.target.closest('.material-btn');
     if (btn && btn.dataset.mini) onMiniBallStyleSelect(btn.dataset.mini);
   });
+  if (gifThemeGridEl) {
+    gifThemeGridEl.addEventListener('click', (e) => {
+      const card = e.target.closest('.gif-theme-card');
+      if (card && card.dataset.gifTheme) onGifThemeSelect(card.dataset.gifTheme);
+    });
+  }
   windowSizeOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.window-size-btn');
     if (btn && btn.dataset.size) onWindowSizeSelect(btn.dataset.size);
