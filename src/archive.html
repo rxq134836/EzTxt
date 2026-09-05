@@ -21,26 +21,32 @@
       </button>
     </header>
 
-    <!-- 工具栏 -->
-    <div class="archive-toolbar">
-      <button class="tb-btn" id="btnBatchMode" type="button" title="批量选择">
-        <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 6h6M5 8.5h6M5 11h3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
-        <span id="batchModeLabel">批量选择</span>
-      </button>
-      <div class="tb-sep"></div>
-      <button class="tb-btn danger hidden is-disabled" id="btnBatchDelete" type="button" title="删除选中">
-        <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 5h10M6 5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M4 5l.7 9a1 1 0 0 0 1 1h4.6a1 1 0 0 0 1-1L12 5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        <span id="batchDeleteLabel">删除</span>
-      </button>
+    <!-- 搜索：按标题过滤已完成任务 -->
+    <div class="archive-search">
+      <input type="text" id="archiveSearchInput" class="search-input"
+             placeholder="搜索已完成任务标题…" spellcheck="false" autocomplete="off" />
+      <button class="search-clear hidden" id="archiveSearchClear" type="button" title="清除搜索">×</button>
     </div>
 
     <!-- 列表区 -->
     <main class="archive-body">
       <div class="archive-empty-tip hidden" id="archiveEmptyTip">
-        <p>暂无已完成的任务</p>
+        <p id="archiveEmptyText">暂无已完成的任务</p>
       </div>
       <ul class="archive-list" id="archiveList"></ul>
     </main>
+
+    <!-- 左下角：批量选择（进入批量模式后变「退出选择」） -->
+    <button class="archive-fab" id="btnBatchMode" type="button" title="批量选择 / 退出">
+      <svg viewBox="0 0 16 16" width="14" height="14"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M5 6h6M5 8.5h6M5 11h3.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      <span id="batchModeLabel">批量选择</span>
+    </button>
+
+    <!-- 右下角：批量删除（进入批量模式后出现） -->
+    <button class="archive-fab danger hidden is-disabled" id="btnBatchDelete" type="button" title="删除选中">
+      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 5h10M6 5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2M4 5l.7 9a1 1 0 0 0 1 1h4.6a1 1 0 0 0 1-1L12 5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span id="batchDeleteLabel">删除选中</span>
+    </button>
   </div>
 
   <!-- 批量删除确认弹窗 -->

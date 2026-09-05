@@ -6,6 +6,9 @@
   // ===== DOM 引用 =====
   const archiveListEl = $('#archiveList');
   const archiveEmptyTip = $('#archiveEmptyTip');
+  const archiveEmptyText = $('#archiveEmptyText');
+  const archiveSearchInput = $('#archiveSearchInput');
+  const archiveSearchClear = $('#archiveSearchClear');
   const winClose = $('#winClose');
   const btnBatchMode = $('#btnBatchMode');
   const btnBatchDelete = $('#btnBatchDelete');
@@ -20,6 +23,7 @@
   let items = [];
   let batchMode = false;
   let batchSelected = new Set();
+  let archiveKeyword = ''; // 归档标题搜索关键字（小写）
   let settings = {
     theme: 'amber',
     material: 'opaque',
@@ -77,17 +81,28 @@
     }
   }
 
+  /** 按搜索关键字过滤（标题，忽略大小写） */
+  function filterByKeyword(list) {
+    const kw = archiveKeyword.trim().toLowerCase();
+    if (!kw) return list;
+    return list.filter((it) => String(it.title || '').toLowerCase().includes(kw));
+  }
+
   /** 按完成日期分组渲染 */
   function groupAndRender() {
     archiveListEl.innerHTML = '';
-    if (items.length === 0) {
+    const filtered = filterByKeyword(items);
+    if (filtered.length === 0) {
       archiveEmptyTip.classList.remove('hidden');
+      archiveEmptyText.textContent = archiveKeyword.trim()
+        ? '没有找到标题匹配的任务'
+        : '暂无已完成的任务';
       return;
     }
     archiveEmptyTip.classList.add('hidden');
 
     // 按 completedAt 倒序排列（最近完成的在前）
-    const sorted = [...items].sort((a, b) => {
+    const sorted = [...filtered].sort((a, b) => {
       const ta = a.completedAt || a.updatedAt || '';
       const tb = b.completedAt || b.updatedAt || '';
       return tb.localeCompare(ta);
@@ -360,6 +375,25 @@
     else enterBatchMode();
   });
 
+  // ===== 归档搜索（按标题过滤，防抖实时过滤） =====
+  let archiveSearchTimer = null;
+  function applyArchiveSearch() {
+    archiveKeyword = archiveSearchInput.value;
+    // 清除按钮随输入显隐
+    archiveSearchClear.classList.toggle('hidden', archiveKeyword.trim() === '');
+    groupAndRender();
+  }
+  archiveSearchInput.addEventListener('input', () => {
+    clearTimeout(archiveSearchTimer);
+    archiveSearchTimer = setTimeout(applyArchiveSearch, 120);
+  });
+  archiveSearchClear.addEventListener('click', () => {
+    archiveSearchInput.value = '';
+    clearTimeout(archiveSearchTimer);
+    applyArchiveSearch();
+    archiveSearchInput.focus();
+  });
+
   // 批量删除
   btnBatchDelete.addEventListener('click', () => {
     if (batchSelected.size === 0) return;
@@ -373,14 +407,20 @@
     if (e.target === confirmMask) closeBatchDeleteConfirm();
   });
 
-  // Esc 关闭弹窗
+  // Esc：清空搜索 → 关闭弹窗 → 退出批量模式
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      if (!confirmMask.classList.contains('hidden')) {
-        closeBatchDeleteConfirm();
-      } else if (batchMode) {
-        exitBatchMode();
-      }
+    if (e.key !== 'Escape') return;
+    if (archiveSearchInput.value !== '') {
+      archiveSearchInput.value = '';
+      clearTimeout(archiveSearchTimer);
+      applyArchiveSearch();
+      archiveSearchInput.blur();
+      return;
+    }
+    if (!confirmMask.classList.contains('hidden')) {
+      closeBatchDeleteConfirm();
+    } else if (batchMode) {
+      exitBatchMode();
     }
   });
 
