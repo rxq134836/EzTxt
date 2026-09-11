@@ -604,6 +604,7 @@ const EDGE_MARGIN = 10;         // mini 球距离屏幕安全边距（px）
 const UNFOLD_GAP = 4;           // 展开后主窗口与 mini 球之间的小间距（px）
 let snapEdge = null;            // 当前 mini 球贴的屏幕边：'left' | 'right' | 'top' | 'bottom'
 let snapMiniPos = null;         // mini 球当前屏幕坐标 {x, y}
+let savedMiniPos = null;        // 用户拖动后保存的 mini 球位置（仅内存，退出软件清除）
 
 function getNearestWorkArea() {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
@@ -629,10 +630,23 @@ function checkSnap() {
   if (!pos) return;
 
   savedBounds = { ...b };
-  snapEdge = pos.edge;
-  snapMiniPos = { x: pos.nx, y: pos.ny };
+  // 自动贴边：优先用用户拖动后保存的位置，否则用计算位置并保存
+  let nx = pos.nx, ny = pos.ny, edge = pos.edge;
+  if (savedMiniPos) {
+    nx = savedMiniPos.x;
+    ny = savedMiniPos.y;
+    edge = savedMiniPos.edge || null;
+    if (wa) {
+      nx = Math.max(wa.x + EDGE_MARGIN, Math.min(nx, wa.x + wa.width - MINI_SIZE - EDGE_MARGIN));
+      ny = Math.max(wa.y + EDGE_MARGIN, Math.min(ny, wa.y + wa.height - MINI_SIZE - EDGE_MARGIN));
+    }
+  } else {
+    savedMiniPos = { x: nx, y: ny, edge };
+  }
+  snapEdge = edge;
+  snapMiniPos = { x: nx, y: ny };
   isSnapped = true;
-  doSnapResize(pos.nx, pos.ny, pos.edge);
+  doSnapResize(nx, ny, edge);
 }
 
 /**
@@ -818,16 +832,28 @@ function enterMini() {
   savedBounds = { ...b };
 
   let nx, ny, edge = null;
-  if (wa) {
+  // 优先使用用户拖动后保存的位置；首次进入时才计算最近边缘并保存
+  if (savedMiniPos) {
+    nx = savedMiniPos.x;
+    ny = savedMiniPos.y;
+    edge = savedMiniPos.edge || null;
+    // 确保保存的位置仍在 workArea 内（防分辨率/多显示器变化后越界）
+    if (wa) {
+      nx = Math.max(wa.x + EDGE_MARGIN, Math.min(nx, wa.x + wa.width - MINI_SIZE - EDGE_MARGIN));
+      ny = Math.max(wa.y + EDGE_MARGIN, Math.min(ny, wa.y + wa.height - MINI_SIZE - EDGE_MARGIN));
+    }
+  } else if (wa) {
     const pos = findNearestEdgePos(wa, b, null);
     if (pos) { nx = pos.nx; ny = pos.ny; edge = pos.edge; }
     else {
       nx = Math.max(wa.x, Math.min(b.x + b.width - MINI_SIZE, wa.x + wa.width - MINI_SIZE));
       ny = Math.max(wa.y, Math.min(b.y + 8, wa.y + wa.height - MINI_SIZE));
     }
+    savedMiniPos = { x: nx, y: ny, edge };
   } else {
     nx = b.x + b.width - MINI_SIZE;
     ny = b.y + 8;
+    savedMiniPos = { x: nx, y: ny, edge: null };
   }
 
   snapEdge = edge || null;
@@ -1347,6 +1373,10 @@ function registerIpc() {
         nx = Math.max(wa.x + EDGE_MARGIN, Math.min(nx, wa.x + wa.width - MINI_SIZE - EDGE_MARGIN));
         ny = Math.max(wa.y + EDGE_MARGIN, Math.min(ny, wa.y + wa.height - MINI_SIZE - EDGE_MARGIN));
       }
+      // 拖动 mini 球后保存位置（仅内存，退出软件清除）
+      const rx = Math.round(nx), ry = Math.round(ny);
+      savedMiniPos = { x: rx, y: ry, edge: snapEdge };
+      snapMiniPos = { x: rx, y: ry };
     }
     mainWindow.setBounds({ x: Math.round(nx), y: Math.round(ny) });
   });
