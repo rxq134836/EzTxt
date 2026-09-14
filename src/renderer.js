@@ -2084,20 +2084,10 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
       btnArchive.addEventListener('click', () => api.openArchive());
     }
 
-    // 其他窗口修改了笔记数据 → 刷新主列表（如果非编辑状态）
+    // 其他窗口修改了笔记数据 → 刷新主列表
     if (api.onNoteChanged) {
       api.onNoteChanged(() => {
-        // 如果正在编辑（有展开的卡片），跳过本次刷新避免打断用户
-        const anyExpanded = items.some((it) => it.expanded && !it.archived);
-        if (!anyExpanded) {
-          loadInitial();
-        } else {
-          // 仅更新归档角标
-          api.loadNote().then((doc) => {
-            items = doc.items || [];
-            updateArchiveBadge();
-          });
-        }
+        loadInitial();
       });
     }
 

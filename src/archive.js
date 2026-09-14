@@ -237,7 +237,7 @@
       const it = doc.items.find((x) => x.id === id);
       if (!it) return;
       const now = new Date().toISOString();
-      Object.assign(it, { done: false, archived: false, completedAt: null, updatedAt: now });
+      Object.assign(it, { done: false, archived: false, completedAt: null, updatedAt: now, expanded: false });
       await api.saveNote(doc);
       // 刷新本地列表
       items = items.filter((x) => x.id !== id);

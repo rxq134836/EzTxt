@@ -985,7 +985,7 @@ function registerIpc() {
     const result = await saveNote(event, doc);
     if (result && result.ok) {
       for (const w of BrowserWindow.getAllWindows()) {
-        if (w !== event.sender && !w.isDestroyed()) {
+        if (w.webContents !== event.sender && !w.isDestroyed()) {
           w.webContents.send('note-changed');
         }
       }
