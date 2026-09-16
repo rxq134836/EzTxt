@@ -1444,6 +1444,24 @@ function installUpdate() {
   return { ok: true };
 }
 
+// 单实例锁定：打包后点击图标重复启动时，聚焦已有窗口而非开第二个
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // 第二个实例尝试启动时，显示已有窗口并提示
+    if (mainWindow) {
+      if (isSnapped) {
+        exitSnapped();
+      } else {
+        mainWindow.show();
+      }
+      mainWindow.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
   initStorageDir();
   registerIpc();
