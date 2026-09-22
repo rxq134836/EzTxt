@@ -336,6 +336,13 @@ Outputs to `dist/`:
 **UI spec addition**
 - `docs/UI-DESIGN-SPEC.md` gained **§11 Danger/delete button styling**: every delete/confirm-delete button must use `.tb-btn.danger`; inventing new danger class names is forbidden
 
+### 2026-09-22
+
+**Data backup**
+- New **Data Backup** section under Settings → Data Storage: one-click export / import
+- **Export backup**: packs current to-dos (`note.json`), settings (`settings.json`) and custom animated themes (`mini-gif-custom/`) into a zip; choose where to save it
+- **Import backup**: pick a backup zip to restore; validates that `note.json` exists before overwriting the current storage; a dedicated confirmation dialog warns that existing data will be overwritten
+- Export / import buttons use the same highlighted selected style as the "Close button" section (`material-btn.is-active`), following the theme accent color
 ---
 
 ## 📄 License
