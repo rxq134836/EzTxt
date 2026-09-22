@@ -211,6 +211,16 @@
       </section>
 
       <section class="settings-section">
+        <h3>数据备份</h3>
+        <div class="settings-block">
+          <div class="material-options">
+            <button class="material-btn is-active" id="btnExportBackup" type="button">导出备份</button>
+            <button class="material-btn is-active" id="btnImportBackup" type="button">导入备份</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
         <h3>软件更新</h3>
         <div class="settings-block">
           <div class="settings-label-row">
@@ -228,6 +238,7 @@
           <p class="storage-hint" id="updateStatus">—</p>
         </div>
       </section>
+
     </div>
   </div>
 
@@ -277,6 +288,17 @@
     </div>
   </div>
 
+  <!-- 导入备份确认弹窗（独立于删除确认） -->
+  <div class="confirm-mask hidden" id="importBackupMask">
+    <div class="confirm-card">
+      <h3>导入备份</h3>
+      <p class="confirm-text">导入备份将覆盖当前所有待办、设置与自定义主题，是否继续？</p>
+      <div class="confirm-actions">
+        <button class="tb-btn" id="btnImportBackupCancel" type="button">取消</button>
+        <button class="tb-btn danger" id="btnImportBackupOk" type="button">确定</button>
+      </div>
+    </div>
+  </div>
   <script src="settings.js"></script>
 </body>
 </html>

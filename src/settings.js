@@ -483,12 +483,17 @@
   const confirmText = $('#confirmText');
   const btnConfirmOk = $('#btnConfirmOk');
   const btnConfirmCancel = $('#btnConfirmCancel');
+  const importBackupMask = $('#importBackupMask');
+  const btnImportBackupCancel = $('#btnImportBackupCancel');
+  const btnImportBackupOk = $('#btnImportBackupOk');
   const btnChangeStorage = $('#btnChangeStorage');
   const btnOpenStorage = $('#btnOpenStorage');
   const storageDirEl = $('#storageDir');
   const storageNoteFileEl = $('#storageNoteFile');
   const storageSettingsFileEl = $('#storageSettingsFile');
   const storageHintEl = $('#storageHint');
+  const btnExportBackup = $('#btnExportBackup');
+  const btnImportBackup = $('#btnImportBackup');
 
   let bgManageMode = false;      // 历史列表管理模式（批量选择删除）
   let bgSelected = new Set();    // 选中的背景图 dataURL
@@ -942,6 +947,45 @@
     } catch (_) {}
   }
 
+  // ===== 备份导出 / 导入 =====
+  async function onExportBackup() {
+    try {
+      const res = await api.exportBackup();
+      if (res.canceled) return;
+      if (res.ok) {
+        showNotice('导出成功', '备份文件已保存到：' + res.path);
+      } else {
+        showNotice('导出失败', (res && res.error) || '未知错误');
+      }
+    } catch (err) {
+      showNotice('导出失败', (err && err.message) || String(err));
+    }
+  }
+
+  async function doImportBackup() {
+    try {
+      const res = await api.importBackup();
+      if (res.canceled) return;
+      if (res.ok) {
+        showNotice('导入成功', '备份已恢复，当前数据已更新。');
+      } else {
+        showNotice('导入失败', (res && res.error) || '未知错误');
+      }
+    } catch (err) {
+      showNotice('导入失败', (err && err.message) || String(err));
+    }
+  }
+
+  function openImportBackupConfirm() {
+    importBackupMask.classList.remove('hidden');
+    btnImportBackupOk.focus();
+  }
+  function closeImportBackupConfirm() {
+    importBackupMask.classList.add('hidden');
+  }
+  function onImportBackup() {
+    openImportBackupConfirm();
+  }
   // ===== 软件更新 =====
   async function initUpdateUI() {
     try {
@@ -1046,6 +1090,11 @@
   bgOpacitySlider.addEventListener('input', onBgOpacityChange);
   btnChangeStorage.addEventListener('click', onChangeStorage);
   btnOpenStorage.addEventListener('click', onOpenStorage);
+  btnExportBackup.addEventListener('click', onExportBackup);
+  btnImportBackup.addEventListener('click', onImportBackup);
+  btnImportBackupCancel.addEventListener('click', closeImportBackupConfirm);
+  btnImportBackupOk.addEventListener('click', () => { closeImportBackupConfirm(); doImportBackup(); });
+  importBackupMask.addEventListener('click', (e) => { if (e.target === importBackupMask) closeImportBackupConfirm(); });
 
   // 背景历史批量管理
   btnManageBg.addEventListener('click', toggleBgManageMode);
@@ -1102,6 +1151,8 @@
       closeCustomSizeDialog();
     } else if (!confirmMask.classList.contains('hidden')) {
       closeBgConfirm();
+    } else if (!importBackupMask.classList.contains('hidden')) {
+      closeImportBackupConfirm();
     } else if (bgManageMode) {
       toggleBgManageMode();
     }

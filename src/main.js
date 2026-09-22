@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs/promises');
 const { existsSync, readFileSync } = require('fs');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+const os = require('os');
 // 自动更新（electron-updater）：仅打包后生效（开发模式自动跳过）
 const { autoUpdater } = require('electron-updater');
 
@@ -1325,6 +1326,89 @@ function registerIpc() {
       return { ok: true, dir: target };
     } catch (err) {
       return { ok: false, error: String(err) };
+    }
+  });
+
+  // ===== 备份导出 / 导入 =====
+  // 导出：把当前存储目录的 note.json / settings.json / custom-gif-themes.json / mini-gif-custom/ 打成 zip（PowerShell Compress-Archive，零依赖）
+  ipcMain.handle('backup-export', async () => {
+    let tmpDir = null;
+    try {
+      const { canceled, filePath } = await dialog.showSaveDialog(settingsWindow, {
+        title: '导出备份',
+        defaultPath: 'EzTxt-备份-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '.zip',
+        filters: [{ name: 'EzTxt 备份', extensions: ['zip'] }]
+      });
+      if (canceled || !filePath) return { canceled: true };
+
+      await fs.mkdir(STORAGE_DIR, { recursive: true });
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'eztxt-bak-'));
+      const copyIfExists = async (src, dst) => {
+        if (existsSync(src)) await fs.copyFile(src, dst);
+      };
+      await copyIfExists(noteFile(), path.join(tmpDir, 'note.json'));
+      await copyIfExists(settingsFile(), path.join(tmpDir, 'settings.json'));
+      await copyIfExists(customGifMetaFile(), path.join(tmpDir, 'custom-gif-themes.json'));
+      if (existsSync(customGifDir())) {
+        await fs.cp(customGifDir(), path.join(tmpDir, 'mini-gif-custom'), { recursive: true });
+      }
+      const psCmd = "Compress-Archive -Path '" + tmpDir + "\\*' -DestinationPath '" + filePath + "' -Force";
+      const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { windowsHide: true });
+      if (r.status !== 0) {
+        return { ok: false, error: (r.stderr && r.stderr.toString()) || '打包失败' };
+      }
+      return { ok: true, path: filePath };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || err) };
+    } finally {
+      if (tmpDir) { try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch (_) {} }
+    }
+  });
+
+  // 导入：选择 zip，Expand-Archive 解压后校验 note.json 存在，覆盖回当前存储目录并广播所有窗口刷新
+  ipcMain.handle('backup-import', async () => {
+    let tmpDir = null;
+    try {
+      const result = await dialog.showOpenDialog(settingsWindow, {
+        title: '导入备份',
+        filters: [{ name: 'EzTxt 备份', extensions: ['zip'] }],
+        properties: ['openFile']
+      });
+      if (result.canceled || !result.filePaths || !result.filePaths[0]) return { canceled: true };
+      const zipPath = result.filePaths[0];
+
+      tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'eztxt-restore-'));
+      const psCmd = "Expand-Archive -Path '" + zipPath + "' -DestinationPath '" + tmpDir + "' -Force";
+      const r = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psCmd], { windowsHide: true });
+      if (r.status !== 0) {
+        return { ok: false, error: (r.stderr && r.stderr.toString()) || '解压失败' };
+      }
+      const restoredNote = path.join(tmpDir, 'note.json');
+      if (!existsSync(restoredNote)) {
+        return { ok: false, error: '不是有效的 EzTxt 备份包（缺少 note.json）' };
+      }
+      await fs.mkdir(STORAGE_DIR, { recursive: true });
+      await fs.copyFile(restoredNote, noteFile());
+      const restoredSettings = path.join(tmpDir, 'settings.json');
+      if (existsSync(restoredSettings)) await fs.copyFile(restoredSettings, settingsFile());
+      const restoredGifMeta = path.join(tmpDir, 'custom-gif-themes.json');
+      if (existsSync(restoredGifMeta)) await fs.copyFile(restoredGifMeta, customGifMetaFile());
+      const restoredGifDir = path.join(tmpDir, 'mini-gif-custom');
+      if (existsSync(restoredGifDir)) {
+        await fs.rm(customGifDir(), { recursive: true, force: true });
+        await fs.cp(restoredGifDir, customGifDir(), { recursive: true });
+      }
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (w.isDestroyed()) continue;
+        w.webContents.send('note-changed');
+        w.webContents.send('settings-changed');
+        w.webContents.send('storage-changed');
+      }
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: String((err && err.message) || err) };
+    } finally {
+      if (tmpDir) { try { await fs.rm(tmpDir, { recursive: true, force: true }); } catch (_) {} }
     }
   });
 

@@ -346,6 +346,10 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('storage-changed', listener);
   },
 
+  // 备份导出 / 导入（zip 包，导入会覆盖当前数据）
+  exportBackup: () => ipcRenderer.invoke('backup-export'),
+  importBackup: () => ipcRenderer.invoke('backup-import'),
+
   // Markdown 渲染（在 preload 中执行，避免渲染进程直接持有 marked）
   renderMarkdown: (text) => marked.parse(text == null ? '' : String(text)),
 
