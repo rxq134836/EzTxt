@@ -109,6 +109,30 @@ turndownService.addRule('strikethrough', {
     return '~~' + text + '~~';
   }
 });
+// 列表规则：处理 Chrome execCommand('indent') 产生的非标准嵌套
+//   Chrome 的 Tab 缩进会把 <ul>/<ol> 作为另一个 <ul>/<ol> 的直接子节点（而非放在 <li> 内），
+//   turndown 默认规则会把它当作同级列表，丢失嵌套层级。
+//   此规则检测到 <ul>/<ol> 的父节点也是 <ul>/<ol> 时，对内容缩进以保留嵌套。
+//   缩进量取决于父列表类型：UL → 2 空格（匹配 "- "），OL → 3 空格（匹配 "1. "）
+turndownService.addRule('list', {
+  filter: ['ul', 'ol'],
+  replacement: function (content, node) {
+    var parent = node.parentNode;
+    if (parent.nodeName === 'LI' && parent.lastElementChild === node) {
+      // 标准嵌套：<ul>/<ol> 在 <li> 内且是最后一个子元素
+      return '\n' + content;
+    } else if (parent.nodeName === 'UL' || parent.nodeName === 'OL') {
+      // 非标准嵌套：<ul>/<ol> 直接作为 <ul>/<ol> 的子节点（Chrome execCommand 产生）
+      var indent = parent.nodeName === 'OL' ? '   ' : '  ';
+      var indented = content.replace(/^/gm, indent);
+      return indented + '\n';
+    } else {
+      // 顶层列表
+      return '\n\n' + content + '\n\n';
+    }
+  }
+});
+
 turndownService.addRule('listItem', {
   filter: 'li',
   replacement: (content, node, options) => {
