@@ -1467,6 +1467,29 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     syncEditorNote(editor, id);
   }
 
+  /** 点击备注中的图片 → 收集该备注内所有图片 src + 当前主题色，交给主进程开独立预览窗口 */
+  function openImagePreview(imgEl) {
+    const editor = imgEl.closest('.card-editor');
+    if (!editor) return;
+    const imgs = Array.from(editor.querySelectorAll('img')).map((i) => i.currentSrc || i.src || '').filter(Boolean);
+    if (!imgs.length) return;
+    const clicked = Array.from(editor.querySelectorAll('img')).indexOf(imgEl);
+    const index = clicked >= 0 ? clicked : 0;
+    if (window.api && window.api.openImagePreview) {
+      // 读取当前主题色（body 上已应用的 CSS 变量，含自定义主题），让预览窗口背景跟随主题
+      const cs = getComputedStyle(document.body);
+      const read = (name, fallback) => (cs.getPropertyValue(name) || '').trim() || fallback;
+      const theme = {
+        bg: read('--bg-solid', '#faf5e1'),
+        ink: read('--ink', '#4a3f24'),
+        inkSoft: read('--ink-soft', '#7a6f55'),
+        accent: read('--accent', '#e0a82e'),
+        line: read('--line', 'rgba(74,63,36,0.12)')
+      };
+      window.api.openImagePreview(imgs, index, theme);
+    }
+  }
+
   function onTaskListClick(e) {
     const target = e.target;
     const li = target.closest('.task-card');
@@ -1475,6 +1498,15 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     // 批量选择模式：点击卡片切换选中（整卡为选择目标）
     if (batchMode) {
       toggleBatchSelect(li.dataset.id);
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    // 点击备注中的图片 → 打开图片预览（按顺序浏览该备注内所有图片）
+    const imgTarget = target.closest && target.closest('.card-editor img');
+    if (imgTarget) {
+      openImagePreview(imgTarget);
       e.preventDefault();
       e.stopPropagation();
       return;

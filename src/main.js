@@ -18,6 +18,7 @@ let settingsWindow = null;
 let customThemeWindow = null;
 let customGifThemeWindow = null;
 let archiveWindow = null;
+let imagePreviewWindow = null;
 // 主窗口 CSS 视口尺寸（渲染层上报 innerWidth/innerHeight，供设置窗口同步）
 let lastMainWindowSize = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
@@ -539,6 +540,70 @@ function openArchiveWindow() {
     archiveWindow = null;
   });
   archiveWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+}
+
+/**
+ * 独立图片预览窗口：点击备注中的图片弹出，可自由放大/最大化，按顺序浏览该备注内所有图片。
+ * 单例：已打开则复用并更新内容。
+ * @param {string[]} srcs 该备注内所有图片的 src（dataURL）
+ * @param {number} index 当前点击的图片索引
+ * @param {object} [theme] 主题色 {bg, ink, inkSoft, accent, line}，预览背景跟随主题
+ */
+function openImagePreviewWindow(srcs, index, theme) {
+  const list = Array.isArray(srcs) ? srcs.filter(Boolean) : [];
+  if (!list.length) return;
+  const idx = Math.max(0, Math.min(index || 0, list.length - 1));
+
+  const sendData = (win) => {
+    if (win && !win.isDestroyed() && !win.webContents.isLoading()) {
+      win.webContents.send('image-preview-data', { srcs: list, index: idx, theme: theme || null });
+    }
+  };
+
+  if (imagePreviewWindow && !imagePreviewWindow.isDestroyed()) {
+    sendData(imagePreviewWindow);
+    imagePreviewWindow.show();
+    imagePreviewWindow.focus();
+    return;
+  }
+
+  imagePreviewWindow = new BrowserWindow({
+    width: 820,
+    height: 640,
+    minWidth: 420,
+    minHeight: 360,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    maximizable: true,
+    fullscreenable: true,
+    backgroundColor: '#00000000',
+    show: false,
+    title: 'EzTxt 图片预览',
+    icon: ICON_PATH_PNG,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false
+    }
+  });
+  imagePreviewWindow.loadFile(path.join(__dirname, 'image-preview.html'));
+  imagePreviewWindow.once('ready-to-show', () => {
+    sendData(imagePreviewWindow);
+    imagePreviewWindow.show();
+  });
+  imagePreviewWindow.on('closed', () => {
+    imagePreviewWindow = null;
+  });
+  imagePreviewWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
       shell.openExternal(url);
     }
@@ -1205,6 +1270,12 @@ function registerIpc() {
   ipcMain.on('open-custom-theme', (_e, editId) => openCustomThemeWindow(editId || null));
   // 打开归档窗口
   ipcMain.on('open-archive', () => openArchiveWindow());
+  // 打开独立图片预览窗口（srcs: 该备注所有图片, index: 当前索引, theme: 主题色）
+  ipcMain.on('open-image-preview', (_e, srcs, index, theme) => openImagePreviewWindow(srcs, index, theme));
+  // 关闭图片预览窗口（预览页关闭按钮）
+  ipcMain.on('preview-window-close', () => {
+    if (imagePreviewWindow && !imagePreviewWindow.isDestroyed()) imagePreviewWindow.close();
+  });
 
   // 窗口材质（经典 / 半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
   // 透明窗口上 DWM 不渲染 backdrop material（Electron #48031），以 CSS 磨砂效果为主

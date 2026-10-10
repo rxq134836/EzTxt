@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: file:; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>EzTxt 图片预览</title>
+  <style>
+    :root {
+      /* 主题色（主窗口渲染层注入覆盖）；以下为深色兜底 */
+      --pv-bg: #16161a;
+      --pv-ink: #f0f0f2;
+      --pv-ink-soft: rgba(240, 240, 242, 0.62);
+      --pv-accent: #e8b84b;
+      --pv-line: rgba(240, 240, 242, 0.14);
+      --danger: #d9534f;
+      --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: "Microsoft YaHei", system-ui, sans-serif;
+      background: transparent;
+      user-select: none;
+    }
+
+    /* 预览窗口根容器：背景跟随主题（--pv-bg），圆角贴窗 */
+    .preview-shell {
+      position: fixed;
+      inset: 0;
+      background: var(--pv-bg);
+      border: 1px solid var(--pv-line);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 顶部拖动条（无边框窗口拖拽区域） */
+    .preview-titlebar {
+      height: 40px;
+      flex: 0 0 40px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      -webkit-app-region: drag;
+      app-region: drag;
+      gap: 8px;
+      border-bottom: 1px solid var(--pv-line);
+    }
+    .preview-titlebar .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--pv-ink-soft);
+    }
+    .preview-titlebar .label {
+      flex: 1;
+      color: var(--pv-ink-soft);
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+    .preview-titlebar .btn-close {
+      width: 28px;
+      height: 28px;
+      border: none;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--pv-ink);
+      font-size: 20px;
+      line-height: 1;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+      app-region: no-drag;
+      transition: background 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+    }
+    .preview-titlebar .btn-close:hover { background: var(--danger); color: #fff; }
+    .preview-titlebar .btn-close:active { transform: scale(0.92); }
+
+    /* 图片舞台：fit 时居中，缩放后可在其中平移 */
+    .preview-stage {
+      flex: 1;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      overflow: hidden;
+    }
+    /* fit 态：等比适配居中 */
+    .preview-stage img {
+      max-width: 92%;
+      max-height: 92%;
+      object-fit: contain;
+      border-radius: 4px;
+      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+      cursor: zoom-in;
+    }
+    /* 缩放态：按原始像素 + transform 控制尺寸/位移，可在 stage 内拖拽平移 */
+    .preview-stage img.pv-zoomed {
+      position: absolute;
+      left: 0;
+      top: 0;
+      max-width: none;
+      max-height: none;
+      width: auto;
+      height: auto;
+      object-fit: fill;
+      transform-origin: 0 0;
+      cursor: grab;
+    }
+    .preview-stage img.pv-zoomed.pv-dragging { cursor: grabbing; }
+
+    /* 左右切换按钮 */
+    .nav-btn {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 42px;
+      height: 42px;
+      border: 1px solid var(--pv-line);
+      border-radius: 50%;
+      background: var(--pv-bg);
+      color: var(--pv-ink);
+      font-size: 28px;
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+      transition: transform 120ms var(--ease-out), background 150ms ease, color 150ms ease;
+      z-index: 2;
+    }
+    .nav-btn:hover { background: var(--pv-accent); color: #fff; border-color: transparent; }
+    .nav-btn:active { transform: translateY(-50%) scale(0.92); }
+    .nav-btn.prev { left: 16px; }
+    .nav-btn.next { right: 16px; }
+    .nav-btn.hidden { display: none; }
+
+    /* 底部：计数器 + 操作提示 + 缩放按钮 */
+    .preview-footer {
+      height: 44px;
+      flex: 0 0 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: var(--pv-ink-soft);
+      font-size: 12px;
+      border-top: 1px solid var(--pv-line);
+    }
+    .preview-footer .counter {
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 1px;
+    }
+    .preview-footer .hint {
+      color: var(--pv-ink-soft);
+      opacity: 0.75;
+    }
+    .zoom-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .zoom-btn {
+      width: 26px;
+      height: 26px;
+      border: 1px solid var(--pv-line);
+      border-radius: 6px;
+      background: transparent;
+      color: var(--pv-ink);
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      transition: transform 100ms var(--ease-out), background 150ms ease, color 150ms ease;
+    }
+    .zoom-btn:hover { background: var(--pv-accent); color: #fff; border-color: transparent; }
+    .zoom-btn:active { transform: scale(0.9); }
+    .zoom-btn.reset { font-size: 13px; width: auto; padding: 0 8px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .preview-titlebar .btn-close, .nav-btn, .zoom-btn { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-shell">
+    <div class="preview-titlebar">
+      <span class="dot"></span>
+      <span class="label">图片预览</span>
+      <button class="btn-close" id="btnClose" type="button" title="关闭 (Esc)">×</button>
+    </div>
+
+    <div class="preview-stage" id="stage">
+      <button class="nav-btn prev" id="btnPrev" type="button" title="上一张">‹</button>
+      <img id="previewImg" alt="" draggable="false" />
+      <button class="nav-btn next" id="btnNext" type="button" title="下一张">›</button>
+    </div>
+
+    <div class="preview-footer">
+      <span class="counter" id="counter">0 / 0</span>
+      <span class="hint">滚轮缩放 · 拖拽平移 · 双击复位</span>
+      <div class="zoom-group">
+        <button class="zoom-btn" id="btnZoomOut" type="button" title="缩小">−</button>
+        <button class="zoom-btn reset" id="btnReset" type="button" title="复位到适合大小">自适应</button>
+        <button class="zoom-btn" id="btnZoomIn" type="button" title="放大">+</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="image-preview.js"></script>
+</body>
+</html>

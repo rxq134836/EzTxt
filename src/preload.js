@@ -327,6 +327,18 @@ contextBridge.exposeInMainWorld('api', {
   // 打开归档窗口
   openArchive: () => ipcRenderer.send('open-archive'),
 
+  // 独立图片预览窗口
+  // 主窗口调用：打开预览窗口并传入该备注所有图片 + 当前索引 + 主题色（背景跟随主题）
+  openImagePreview: (srcs, index, theme) => ipcRenderer.send('open-image-preview', srcs, index, theme),
+  // 预览窗口调用：接收主进程下发的图片数据
+  onImagePreviewData: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('image-preview-data', listener);
+    return () => ipcRenderer.removeListener('image-preview-data', listener);
+  },
+  // 预览窗口调用：关闭自身
+  closeImagePreviewWindow: () => ipcRenderer.send('preview-window-close'),
+
   // ===== 自定义主题 =====
   // 由 {accent, bg, ink, dark} 派生完整 CSS 变量对象（key 不带 -- 前缀）
   deriveCustomTheme: (theme) => deriveCustomTheme(theme),
