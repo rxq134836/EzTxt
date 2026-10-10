@@ -350,6 +350,32 @@
       return;
     }
 
+    // 备注中的图片：点击打开独立图片预览（与首页一致，按顺序浏览该备注内所有图片）
+    const imgEl = e.target.closest('.card-editor img');
+    if (imgEl) {
+      e.preventDefault();
+      e.stopPropagation();
+      const editor = imgEl.closest('.card-editor');
+      if (editor) {
+        const imgs = Array.from(editor.querySelectorAll('img')).map((i) => i.currentSrc || i.src || '').filter(Boolean);
+        const clicked = Array.from(editor.querySelectorAll('img')).indexOf(imgEl);
+        if (imgs.length && window.api && window.api.openImagePreview) {
+          // 读取当前窗口主题色（归档窗口为 amber），让预览背景跟随主题
+          const cs = getComputedStyle(document.body);
+          const read = (n, fb) => (cs.getPropertyValue(n) || '').trim() || fb;
+          const theme = {
+            bg: read('--bg-solid', '#faf5e1'),
+            ink: read('--ink', '#4a3f24'),
+            inkSoft: read('--ink-soft', '#7a6f55'),
+            accent: read('--accent', '#e0a82e'),
+            line: read('--line', 'rgba(74,63,36,0.12)')
+          };
+          window.api.openImagePreview(imgs, Math.max(0, clicked), theme);
+        }
+      }
+      return;
+    }
+
     // 备注正文区：只读，允许选择文本
     if (e.target.closest('.card-note')) return;
 
