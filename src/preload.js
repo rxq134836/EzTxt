@@ -423,6 +423,21 @@ contextBridge.exposeInMainWorld('api', {
     return () => ipcRenderer.removeListener('snap-state-changed', listener);
   },
 
+  // 系统毛玻璃（实验）状态通知：{ active, experimental, supported }
+  // active=主窗口已是系统亚克力非透明窗口；渲染层据此保留 acrylic 材质或回退半透明
+  onSysAcrylicState: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('sys-acrylic-state', listener);
+    return () => ipcRenderer.removeListener('sys-acrylic-state', listener);
+  },
+
+  // 独立 mini 球窗口显示通知（mini-ball.html 用，主窗口不使用）
+  onMiniShow: (callback) => {
+    const listener = (_event, payload) => callback(payload || {});
+    ipcRenderer.on('mini-show', listener);
+    return () => ipcRenderer.removeListener('mini-show', listener);
+  },
+
   // 全局键盘活动通知（mini 态下 PowerShell 监听检测到按键 → 触发打字 gif 切换）
   onTypingActivity: (callback) => {
     const listener = () => callback();

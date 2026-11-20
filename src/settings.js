@@ -21,6 +21,7 @@
   const btnAddGifTheme = $('#btnAddGifTheme');
   const windowSizeOptionsEl = $('#windowSizeOptions');
   const miniBallStyleOptionsEl = $('#miniBallStyleOptions');
+  const sysAcrylicSwitchEl = $('#sysAcrylicSwitch');
   const bgOpacityBlock = $('#bgOpacityBlock');
   const acrylicBlurBlock = $('#acrylicBlurBlock');
   const acrylicBlurSlider = $('#acrylicBlur');
@@ -40,7 +41,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', miniBallGif: 'remi', autoStart: false, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', miniBallGif: 'remi', autoStart: false, experimentalAcrylic: false, shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -178,19 +179,35 @@
   }
 
   // ===== 材质（经典 / 半透明 / 亚克力） =====
-  // 亚克力暂时隐藏（UI 不可选）；旧配置若残留 acrylic，加载时回退为半透明
+  // 亚克力仅在「系统毛玻璃（实验）」开启后可选（真实桌面模糊，Win11 22H2+）；
+  // 开关关闭时旧配置残留 acrylic 回退为半透明
   const MATERIALS = ['opaque', 'translucent'];
   const HIDDEN_MATERIALS = ['acrylic'];
 
   /** 设置窗口自身立即套用材质样式（磨砂观感跟随主窗口） */
   function applyMaterial(material) {
     let val = MATERIALS.includes(material) ? material : 'opaque';
-    if (HIDDEN_MATERIALS.includes(material)) val = 'translucent'; // 隐藏材质回退
+    if (HIDDEN_MATERIALS.includes(material)) {
+      // 实验开关开启时亚克力可选；关闭时回退半透明
+      val = settings.experimentalAcrylic ? 'acrylic' : 'translucent';
+    }
     settings.material = val;
     document.body.dataset.material = val;
     renderMaterialOptions();
     updateBgOpacityVisibility();
     updateAcrylicBlurVisibility();
+  }
+
+  /** 实验开关决定「亚克力」材质按钮是否显示 */
+  function updateAcrylicVisibility() {
+    const acrylicBtn = materialOptionsEl.querySelector('[data-material="acrylic"]');
+    if (acrylicBtn) acrylicBtn.classList.toggle('hidden', !settings.experimentalAcrylic);
+  }
+
+  function applyExperimentalAcrylic(on) {
+    settings.experimentalAcrylic = !!on;
+    if (sysAcrylicSwitchEl) sysAcrylicSwitchEl.checked = !!on;
+    updateAcrylicVisibility();
   }
 
   function renderMaterialOptions() {
@@ -871,8 +888,10 @@
         api.clearCustomThemeVars();
       }
       applyFontSize(settings.fontSize);
-      // 亚克力已隐藏：旧配置残留 acrylic 时回退为半透明并持久化，避免下次仍生效
-      if (HIDDEN_MATERIALS.includes(settings.material)) {
+      // 实验开关先应用（决定亚克力按钮显隐与材质回退方向）
+      applyExperimentalAcrylic(settings.experimentalAcrylic);
+      // 旧配置残留 acrylic 且实验开关未开启 → 回退为半透明并持久化，避免下次仍生效
+      if (HIDDEN_MATERIALS.includes(settings.material) && !settings.experimentalAcrylic) {
         settings.material = 'translucent';
         api.saveSettings({ material: 'translucent' });
       }
@@ -1062,6 +1081,19 @@
   });
   if (autoStartSwitchEl) {
     autoStartSwitchEl.addEventListener('change', () => onAutoStartToggle(autoStartSwitchEl.checked));
+  }
+  // 系统毛玻璃（实验）开关：保存后由主进程按需重建主窗口（transparent 为创建期选项）
+  if (sysAcrylicSwitchEl) {
+    sysAcrylicSwitchEl.addEventListener('change', () => {
+      if (isLoadingSettings) return;
+      applyExperimentalAcrylic(sysAcrylicSwitchEl.checked);
+      // 关闭开关且当前是亚克力材质 → 回退半透明，避免留下不可用的材质状态
+      if (!settings.experimentalAcrylic && settings.material === 'acrylic') {
+        applyMaterial('translucent');
+        api.saveSettings({ material: 'translucent' });
+      }
+      api.saveSettings({ experimentalAcrylic: settings.experimentalAcrylic });
+    });
   }
   miniBallStyleOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');

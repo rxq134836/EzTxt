@@ -278,6 +278,23 @@ body[data-material="acrylic"] .app {
   border-color: rgba(255, 255, 255, 0.45);
 }
 
+/* 材质：亚克力（系统毛玻璃·实验）—— 主窗口是非透明窗口 + Windows 系统亚克力材质，
+   桌面模糊由系统完成，页面不再叠加 CSS blur，只铺低透明度主题色着色。
+   优先级高于上方通用 acrylic 规则（选择器更具体）。 */
+body[data-sys-acrylic="1"] {
+  background: transparent;
+}
+body[data-sys-acrylic="1"][data-material="acrylic"] .app {
+  background: rgba(var(--bg-rgb), 0.42);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset -0.75px -0.5px 0 rgba(255, 255, 255, 0.28),
+    inset 0.75px 0.5px 0 rgba(255, 255, 255, 0.12),
+    0 2px 10px rgba(0, 0, 0, 0.22);
+}
+
 /* 材质：半透明 —— 毛玻璃观感：稍提高底色浓度，叠边缘高光、柔光和反射层；
    透明窗口无法模糊桌面，反射层用伪元素避免被 backdrop-filter 一起糊掉 */
 body[data-material="translucent"] .app,

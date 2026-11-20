@@ -82,6 +82,9 @@
   ];
   let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', shortcuts: {} };
   let isMiniMode = false;
+  // 系统毛玻璃（实验）：主窗口为非透明窗口 + Windows 系统亚克力材质时为 true（主进程下发）
+  // 此时「亚克力」材质不再映射为半透明，改用系统真实桌面模糊
+  let sysAcrylicActive = false;
 let miniMouseIgnoring = false; // mini 态鼠标穿透状态
   let isLoadingSettings = false;
   let enterMiniTimer = null;
@@ -1761,14 +1764,15 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     if (persist) api.saveSettings({ theme: key, ...(key !== 'custom' ? { customThemeId: null } : {}) });
   }
 
-  /** 应用窗口材质：opaque（经典不透明）/ translucent（半透明）。
-   *  亚克力（acrylic）暂时隐藏：旧配置残留时回退为半透明。
-   *  经典=实心主题色；半透明=高不透明度+轻模糊。 */
+  /** 应用窗口材质：opaque（经典不透明）/ translucent（半透明）/ acrylic（亚克力）。
+   *  亚克力仅在「系统毛玻璃（实验）」激活时生效（主窗口为系统亚克力非透明窗口，
+   *  桌面模糊由系统完成）；否则保持旧行为回退为半透明。 */
   function applyMaterial(material) {
     let val = ['opaque', 'translucent'].includes(material) ? material : 'opaque';
-    if (material === 'acrylic') val = 'translucent'; // 隐藏材质回退
+    if (material === 'acrylic') val = sysAcrylicActive ? 'acrylic' : 'translucent'; // 实验开关关闭时回退
     settings.material = val;
     document.body.dataset.material = val;
+    document.body.dataset.sysAcrylic = sysAcrylicActive ? '1' : '0';
     if (api.setWindowMaterial) api.setWindowMaterial(val);
   }
 
@@ -2394,6 +2398,16 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     if (api.onSnapStateChanged) {
       api.onSnapStateChanged((mini, edge) => {
         if (mini) enterMiniMode(); else exitMiniMode(edge);
+      });
+    }
+
+    // 系统毛玻璃（实验）状态：主窗口类型随主进程下发结果切换材质应用方式
+    if (api.onSysAcrylicState) {
+      api.onSysAcrylicState((st) => {
+        const active = !!(st && st.active);
+        if (active === sysAcrylicActive) return;
+        sysAcrylicActive = active;
+        applyMaterial(settings.material); // 按新能力重新应用材质（acrylic 或回退半透明）
       });
     }
 

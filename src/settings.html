@@ -44,9 +44,21 @@
           <div class="material-options" id="materialOptions">
             <button class="material-btn" type="button" data-material="opaque">经典</button>
             <button class="material-btn" type="button" data-material="translucent">半透明</button>
-            <!-- 亚克力暂时隐藏（保留 DOM 便于以后恢复） -->
+            <!-- 亚克力：仅在下方「系统毛玻璃（实验）」开启后可选（真实桌面模糊） -->
             <button class="material-btn hidden" type="button" data-material="acrylic">亚克力</button>
           </div>
+        </div>
+
+        <!-- 系统毛玻璃（实验）：非透明主窗口 + Windows 系统亚克力材质，真实模糊窗口背后的桌面 -->
+        <div class="settings-block" id="sysAcrylicBlock">
+          <div class="settings-label-row">
+            <span class="settings-label">系统毛玻璃（实验）</span>
+            <label class="switch" style="margin-left: auto;">
+              <input type="checkbox" id="sysAcrylicSwitch" />
+              <span class="slider"></span>
+            </label>
+          </div>
+          <p class="settings-hint">开启后材质出现「亚克力」选项，可真实模糊窗口背后的桌面内容（需要 Windows 11 22H2+）。切换时主窗口会重启一次；关闭随时回退。</p>
         </div>
 
         <!-- 磨砂感：仅亚克力材质时显示 -->

@@ -24,6 +24,31 @@ let lastMainWindowSize = null;
 // 当前窗口材质（由设置页 set-window-material 更新；mini 态临时切 none，退出后恢复）
 let currentMaterial = 'opaque';
 
+// ===== 系统毛玻璃（实验） =====
+// 开启后主窗口改为「非透明窗口 + Windows 系统亚克力材质」，桌面模糊由系统完成。
+// 条件：设置 experimentalAcrylic 开启 && 材质为 acrylic && Windows 11 22H2(build>=22621)。
+// 此模式下 mini 球拆分为独立透明窗口（主窗口隐藏），关闭时回退为原有单窗口缩放方案。
+let sysAcrylicMode = false;         // 当前是否处于系统毛玻璃模式（决定主窗口类型与 mini 方案）
+let experimentalAcrylic = false;    // 设置项：系统毛玻璃实验开关
+let miniWindow = null;              // mini 球独立透明窗口（仅系统毛玻璃模式下使用）
+let miniReadyPromise = null;        // mini 窗口页面加载完成承诺（避免首次弹出白屏/竞态）
+
+/** Windows 11 22H2 及以上（系统亚克力材质最低要求 build 22621） */
+function isWin11MaterialSupported() {
+  try {
+    const parts = os.release().split('.');
+    const build = parseInt(parts[2], 10);
+    return Number.isFinite(build) && build >= 22621;
+  } catch (_) {
+    return false;
+  }
+}
+
+/** 根据当前设置计算是否应处于系统毛玻璃模式 */
+function computeSysAcrylic(material, experimental) {
+  return !!(experimental && material === 'acrylic' && isWin11MaterialSupported());
+}
+
 // 存储目录：动态（可由设置页修改）；开发时默认项目 data/，打包后默认 userData/storage
 let STORAGE_DIR = null;
 function defaultStorageDir() { return app.isPackaged ? path.join(app.getPath('userData'), 'storage') : path.join(__dirname, '..', 'data'); }
@@ -215,6 +240,7 @@ const DEFAULT_SETTINGS = {
   customThemes: [],       // 自定义主题列表（最多 5 个）{id, name, accent, bg, ink, dark}
   material: 'opaque',      // 窗口材质：opaque（经典不透明）/ translucent（半透明）/ acrylic（亚克力磨砂）
   acrylicBlur: 40,         // 亚克力磨砂强度（backdrop-filter 模糊半径 px，0~60）
+  experimentalAcrylic: false, // 实验开关：系统毛玻璃（真实模糊桌面，需 Win11 22H2+，默认关闭）
   bgImage: null,          // 当前背景图 dataURL（渲染层压缩后存入）
   bgHistory: [],          // 最近上传的背景图列表（新→旧，最多 10 张，dataURL）
   bgOpacity: 0.35,        // 背景图不透明度（让卡片仍可读）
@@ -313,6 +339,10 @@ function saveSettings(_, patch) {
       if (patch && typeof patch.autoStart === 'boolean') {
         syncAutoStart(patch.autoStart);
       }
+      // 材质 / 系统毛玻璃开关变更 → 重新计算系统毛玻璃模式（需要时重建主窗口）
+      experimentalAcrylic = !!merged.experimentalAcrylic;
+      currentMaterial = ['opaque', 'translucent', 'acrylic'].includes(merged.material) ? merged.material : 'opaque';
+      applyMaterialMode();
       // 通知所有窗口重新加载设置（主题/字号/快捷键即时生效；自定义主题保存后设置窗口同步刷新）
       const { BrowserWindow } = require('electron');
       for (const win of BrowserWindow.getAllWindows()) {
@@ -326,8 +356,62 @@ function saveSettings(_, patch) {
   });
 }
 
-function createWindow() {
-  mainWindow = new BrowserWindow({
+/**
+ * 重新计算系统毛玻璃模式并与当前状态比对：
+ *  - 模式未变：系统毛玻璃模式下无需处理（材质随窗口创建设定）；旧透明窗口按需 setBackgroundMaterial
+ *  - 模式改变：重建主窗口（transparent 是创建期选项，运行时无法切换）
+ * @param {boolean} recreateOnNeed 模式变化时是否立即重建（quit 途中传 false 避免退出时建窗）
+ */
+function applyMaterialMode(recreateOnNeed = true) {
+  const want = computeSysAcrylic(currentMaterial, experimentalAcrylic);
+  if (want === sysAcrylicMode) {
+    if (!sysAcrylicMode && !isSnapped && mainWindow && !mainWindow.isDestroyed()) {
+      // 旧透明窗口：跟随材质设置系统亚克力（不支持的平台抛错忽略）
+      try { mainWindow.setBackgroundMaterial(currentMaterial === 'acrylic' ? 'acrylic' : 'none'); } catch (_) {}
+    }
+    return;
+  }
+  sysAcrylicMode = want;
+  if (recreateOnNeed) recreateMainWindow();
+}
+
+/**
+ * 重建主窗口：transparent / backgroundMaterial 是创建期选项，材质模式切换只能重建。
+ * 保留原位置尺寸（mini 态下窗口已缩为 56×56，按最小尺寸恢复）；mini 球窗口一并清理。
+ */
+function recreateMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) { createWindow(); return; }
+  const b = mainWindow.getBounds();
+  const visible = mainWindow.isVisible();
+  // 清理 mini 态（材质模式切换会连带 mini 方案变化）
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    try { miniWindow.destroy(); } catch (_) {}
+  }
+  miniWindow = null;
+  miniReadyPromise = null;
+  isSnapped = false;
+  savedBounds = null;
+  snapEdge = null;
+  snapMiniPos = null;
+  setTypingForward(false);
+  const bounds = {
+    x: b.x,
+    y: b.y,
+    width: Math.max(380, b.width),
+    height: Math.max(380, b.height)
+  };
+  mainWindow.destroy();
+  mainWindow = null;
+  createWindow(bounds, !visible);
+}
+
+/**
+ * 创建主窗口。
+ * @param {object|null} [bounds] 重建时保留原位置尺寸 {x,y,width,height}
+ * @param {boolean} [keepHidden] true=创建后保持隐藏（原窗口藏在托盘时重建）
+ */
+function createWindow(bounds = null, keepHidden = false) {
+  const opts = {
     width: 560,
     height: 620,
     minWidth: 380,
@@ -350,12 +434,41 @@ function createWindow() {
       sandbox: false,
       spellcheck: false
     }
-  });
+  };
+  if (bounds && Number.isFinite(bounds.width) && Number.isFinite(bounds.height)) {
+    opts.width = Math.max(380, Math.round(bounds.width));
+    opts.height = Math.max(380, Math.round(bounds.height));
+    if (Number.isFinite(bounds.x) && Number.isFinite(bounds.y)) {
+      opts.x = Math.round(bounds.x);
+      opts.y = Math.round(bounds.y);
+    }
+  }
+  // 系统毛玻璃（实验）：非透明窗口 + Windows 系统亚克力材质（桌面模糊由系统完成）
+  if (sysAcrylicMode) {
+    opts.transparent = false;
+    opts.backgroundMaterial = 'acrylic';
+  }
+  mainWindow = new BrowserWindow(opts);
+
+  if (sysAcrylicMode) {
+    // 兼容旧版本：构造参数不可用时直接调用方法兜底
+    try { mainWindow.setBackgroundMaterial('acrylic'); } catch (_) {}
+  }
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+    if (!keepHidden) mainWindow.show();
+  });
+
+  // 页面加载完成后下发光玻璃模式状态（渲染层据此选择 acrylic / 半透明回退）
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.webContents.send('sys-acrylic-state', {
+      active: sysAcrylicMode,
+      experimental: experimentalAcrylic,
+      supported: isWin11MaterialSupported()
+    });
   });
 
   // 窗口首次 show 后也跑一次贴边检测（应对上次关闭前就在边缘的情况）
@@ -672,6 +785,60 @@ let snapEdge = null;            // 当前 mini 球贴的屏幕边：'left' | 'ri
 let snapMiniPos = null;         // mini 球当前屏幕坐标 {x, y}
 let savedMiniPos = null;        // 用户拖动后保存的 mini 球位置（仅内存，退出软件清除）
 
+/**
+ * 确保独立 mini 球窗口存在（仅系统毛玻璃模式下使用）。
+ * 主窗口为非透明窗口时无法原位缩小成球（球外区域会露出实心底色），
+ * 改为把球放进一个 56×56 的独立透明窗口。
+ */
+function ensureMiniWindow() {
+  if (miniWindow && !miniWindow.isDestroyed()) return miniWindow;
+  miniWindow = new BrowserWindow({
+    width: MINI_SIZE,
+    height: MINI_SIZE,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,          // 阴影由 CSS box-shadow 提供（GIF 球无阴影），避免方形窗口阴影穿帮
+    show: false,
+    title: 'EzTxt mini',
+    icon: ICON_PATH_PNG,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+      spellcheck: false
+    }
+  });
+  miniReadyPromise = new Promise((resolve) => {
+    if (!miniWindow || miniWindow.isDestroyed()) { resolve(); return; }
+    miniWindow.once('ready-to-show', () => resolve());
+  });
+  miniWindow.loadFile(path.join(__dirname, 'mini-ball.html'));
+  miniWindow.on('closed', () => {
+    miniWindow = null;
+    miniReadyPromise = null;
+  });
+  return miniWindow;
+}
+
+/** mini 球窗口就绪后在指定位置显示（先显示球、再隐藏主窗口，避免闪烁） */
+async function showMiniWindow(nx, ny, edge) {
+  ensureMiniWindow();
+  try { await miniReadyPromise; } catch (_) {}
+  if (!miniWindow || miniWindow.isDestroyed()) return;
+  miniWindow.setBounds({ x: Math.round(nx), y: Math.round(ny), width: MINI_SIZE, height: MINI_SIZE });
+  miniWindow.setAlwaysOnTop(true, 'screen-saver');
+  miniWindow.webContents.send('mini-show', { edge: edge || null });
+  miniWindow.showInactive(); // 不抢占焦点，用户继续操作原应用
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+}
+
 function getNearestWorkArea() {
   if (!mainWindow || mainWindow.isDestroyed()) return null;
   try {
@@ -833,8 +1000,13 @@ while($true){
     const readline = require('readline');
     const rl = readline.createInterface({ input: keyMonitorProc.stdout });
     rl.on('line', () => {
-      if (forwardTyping && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('typing-activity');
+      if (!forwardTyping) return;
+      // 系统毛玻璃模式下 mini 态主窗口已隐藏，打字事件发给独立 mini 球窗口
+      const target = (sysAcrylicMode && isSnapped && miniWindow && !miniWindow.isDestroyed())
+        ? miniWindow
+        : mainWindow;
+      if (target && !target.isDestroyed()) {
+        target.webContents.send('typing-activity');
       }
     });
     // 进程意外退出 → 3 秒后自动重启
@@ -872,10 +1044,21 @@ function doSnapResize(nx, ny, edge = null) {
   mainWindow.setSkipTaskbar(true);
   mainWindow.webContents.send('pin-toggled', true); // 通知渲染层 pin 按钮高亮
   mainWindow.webContents.send('snap-state-changed', true, edge || null);
-  // mini 态切掉系统材质：避免亚克力磨砂铺满整个 56px 窗口矩形，球外露空白
-  try { mainWindow.setBackgroundMaterial('none'); } catch (_) {}
   const from = mainWindow.getBounds();
   const to = { x: Math.round(nx), y: Math.round(ny), width: MINI_SIZE, height: MINI_SIZE };
+
+  if (sysAcrylicMode) {
+    // 系统毛玻璃模式：主窗口非透明，不能原位缩成球（球外露实心底色）。
+    // 收缩动画照常播放，动画结束后隐藏主窗口、弹出独立 mini 球窗口。
+    setTypingForward(true);
+    animateWindowBounds(from, to, 180, () => {
+      showMiniWindow(nx, ny, edge || null);
+    });
+    return;
+  }
+
+  // mini 态切掉系统材质：避免亚克力磨砂铺满整个 56px 窗口矩形，球外露空白
+  try { mainWindow.setBackgroundMaterial('none'); } catch (_) {}
   animateWindowBounds(from, to, 180);
   // mini 态开启打字事件转发（PowerShell 进程常驻，仅切换标志）
   setTypingForward(true);
@@ -940,7 +1123,10 @@ function exitSnapped() {
   // 退出 mini：停止打字事件转发
   setTypingForward(false);
 
-  const miniBounds = mainWindow.getBounds();
+  const dual = sysAcrylicMode;
+  const miniBounds = (dual && miniWindow && !miniWindow.isDestroyed())
+    ? miniWindow.getBounds()
+    : mainWindow.getBounds();
   const wa = getNearestWorkArea();
 
   const mainW = savedBounds.width;
@@ -987,6 +1173,21 @@ function exitSnapped() {
   mainWindow.setSkipTaskbar(false);
   // 带 edge 通知渲染层：从贴近 mini 球的角展开（左→左下、右→右下…）
   mainWindow.webContents.send('snap-state-changed', false, edge || null);
+
+  if (dual) {
+    // 系统毛玻璃模式：隐藏独立 mini 球窗口，把主窗口放回球位置再平滑展开
+    mainWindow.setBounds({ x: miniBounds.x, y: miniBounds.y, width: MINI_SIZE, height: MINI_SIZE });
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.hide();
+      miniWindow.setAlwaysOnTop(false);
+    }
+    mainWindow.show(); // 用户点击球展开，直接聚焦
+    animateWindowBounds(miniBounds, targetBounds, 200, () => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      applyPinState(); // 恢复用户置顶设置
+    });
+    return;
+  }
 
   // 平滑展开：从 mini 球位置动画到目标位置（期间保持置顶，动画结束后恢复用户置顶设置）
   animateWindowBounds(miniBounds, targetBounds, 200, () => {
@@ -1035,6 +1236,7 @@ function createTray() {
 
   tray.on('click', () => {
     if (!mainWindow) { createWindow(); return; }
+    if (isSnapped) { exitSnapped(); return; } // mini 态点击托盘 → 展开主窗口
     if (mainWindow.isVisible()) {
       mainWindow.hide();
     } else {
@@ -1277,10 +1479,11 @@ function registerIpc() {
     if (imagePreviewWindow && !imagePreviewWindow.isDestroyed()) imagePreviewWindow.close();
   });
 
-  // 窗口材质（经典 / 半透明 / 亚克力）—— 系统级亚克力（Windows 11 22H2+）；
-  // 透明窗口上 DWM 不渲染 backdrop material（Electron #48031），以 CSS 磨砂效果为主
+  // 窗口材质（经典 / 半透明 / 亚克力）—— 仅旧透明窗口需要运行时 setBackgroundMaterial；
+  // 系统毛玻璃模式的材质在窗口创建时固定，模式切换由 saveSettings → applyMaterialMode 处理
   ipcMain.on('set-window-material', (_e, material) => {
     currentMaterial = ['opaque', 'translucent', 'acrylic'].includes(material) ? material : 'opaque';
+    if (sysAcrylicMode) return;              // 材质已随窗口创建固定
     if (isSnapped) return; // mini 态保持 none（只有球可见），退出时由 exitSnapped 恢复
     if (!mainWindow || mainWindow.isDestroyed()) return;
     try {
@@ -1291,10 +1494,14 @@ function registerIpc() {
   // mini 态鼠标穿透：透明窗口矩形会拦截点击（球周围透明边缘挡住下层软件），
   // 通过 setIgnoreMouseEvents 让球外区域点击穿透；forward 保留 mousemove，
   // 渲染层据此在鼠标移入球时恢复捕获（球可点击）。
+  // 系统毛玻璃模式下 mini 球是独立窗口，穿透设置路由到 mini 窗口。
   ipcMain.on('set-ignore-mouse', (_e, ignore) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const target = (sysAcrylicMode && isSnapped && miniWindow && !miniWindow.isDestroyed())
+      ? miniWindow
+      : mainWindow;
+    if (!target || target.isDestroyed()) return;
     try {
-      mainWindow.setIgnoreMouseEvents(!!ignore, ignore ? { forward: true } : undefined);
+      target.setIgnoreMouseEvents(!!ignore, ignore ? { forward: true } : undefined);
     } catch (_) {}
   });
 
@@ -1516,9 +1723,12 @@ function registerIpc() {
   ipcMain.on('enter-mini', () => enterMini());
 
   // JS 层拖动窗口（mini-bar 原生 drag region 移除后，用偏移量移动窗口）
+  // 系统毛玻璃模式下 mini 态拖动的是独立 mini 球窗口
   ipcMain.on('move-window', (_e, dx, dy) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return;
-    const b = mainWindow.getBounds();
+    const dual = sysAcrylicMode && isSnapped && miniWindow && !miniWindow.isDestroyed();
+    const target = dual ? miniWindow : mainWindow;
+    if (!target || target.isDestroyed()) return;
+    const b = target.getBounds();
     let nx = b.x + (dx || 0);
     let ny = b.y + (dy || 0);
     if (isSnapped) {
@@ -1533,7 +1743,7 @@ function registerIpc() {
       savedMiniPos = { x: rx, y: ry, edge: snapEdge };
       snapMiniPos = { x: rx, y: ry };
     }
-    mainWindow.setBounds({ x: Math.round(nx), y: Math.round(ny) });
+    target.setBounds({ x: Math.round(nx), y: Math.round(ny) });
   });
 }
 
@@ -1617,8 +1827,15 @@ if (!gotLock) {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   initStorageDir();
+  // 先读设置再创建窗口：系统毛玻璃是创建期选项（transparent/backgroundMaterial 运行时不可切换）
+  try {
+    const s = await loadSettings();
+    experimentalAcrylic = !!s.experimentalAcrylic;
+    currentMaterial = ['opaque', 'translucent', 'acrylic'].includes(s.material) ? s.material : 'opaque';
+    sysAcrylicMode = computeSysAcrylic(currentMaterial, experimentalAcrylic);
+  } catch (_) {}
   registerIpc();
   createWindow();
   createTray();
@@ -1638,6 +1855,8 @@ app.whenReady().then(() => {
     if (!mainWindow || mainWindow.isDestroyed()) {
       createWindow();
       if (!tray) createTray();
+    } else if (isSnapped) {
+      exitSnapped();
     } else {
       mainWindow.show();
       mainWindow.focus();
