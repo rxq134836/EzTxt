@@ -2431,6 +2431,28 @@ let miniMouseIgnoring = false; // mini 态鼠标穿透状态
     // 初始上报一次（等布局稳定）
     setTimeout(reportViewportSize, 300);
 
+    // 启动自动检查发现新版本 → 轻提示（到设置页下载安装，与 FlowSpec 一致）
+    const updateToast = $('#updateToast');
+    const updateToastText = $('#updateToastText');
+    let lastToastVersion = '';
+    if (api.onUpdateStatus && updateToast && updateToastText) {
+      api.onUpdateStatus((payload) => {
+        if (!payload || payload.phase !== 'available' || !payload.info) return;
+        // 同一版本只提示一次（FlowSpec 行为）
+        if (payload.info.version === lastToastVersion) return;
+        lastToastVersion = payload.info.version;
+        updateToastText.textContent = '发现新版本 v' + payload.info.version + '，点击前往设置更新';
+        updateToast.classList.remove('hidden');
+      });
+      $('#btnUpdateToastSettings')?.addEventListener('click', () => {
+        updateToast.classList.add('hidden');
+        api.openSettings?.();
+      });
+      $('#btnUpdateToastClose')?.addEventListener('click', () => {
+        updateToast.classList.add('hidden');
+      });
+    }
+
     window.addEventListener('beforeunload', () => {
       if (isDirty) {
         try {

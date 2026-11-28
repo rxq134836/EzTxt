@@ -7,8 +7,9 @@ const { existsSync, readFileSync } = require('fs');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
 const os = require('os');
-// 自动更新（electron-updater）：仅打包后生效（开发模式自动跳过）
-const { autoUpdater } = require('electron-updater');
+// 自托管版本更新：与 FlowSpec 共用博客通用清单接口（/api/release/:id/latest.json）
+const updateService = require('./updateService.cjs');
+const DEFAULT_UPDATE_URL = 'https://www.andingsi.cn/api/release/1';
 
 let mainWindow = null;
 let isPinned = false;
@@ -225,6 +226,7 @@ const DEFAULT_SETTINGS = {
   miniBallStyle: 'classic', // mini 球风格：classic（经典圆球）/ gif（动画）
   miniBallGif: 'remi',     // mini 球动画主题名（扫描 mini-gifs/ 目录自动发现）
   autoStart: false,         // 开机自启（Windows 登录时自动启动 EzTxt）
+  updateUrl: 'https://www.andingsi.cn/api/release/1', // 更新源（博客通用版本清单接口）
   // Markdown 编辑器快捷键（设置面板可开关 / 改绑）
   shortcuts: {
     bold:          { enabled: true, key: 'b', ctrl: true,  shift: false, alt: false },
@@ -1298,16 +1300,9 @@ function registerIpc() {
     } catch (_) {}
   });
 
-  // ===== 自动更新（GitHub Releases） =====
-  ipcMain.handle('update-check', (_e, notifyUpToDate) => checkForUpdates(!!notifyUpToDate));
-  ipcMain.handle('update-install', () => installUpdate());
-  // 当前应用版本（设置页「软件更新」显示）
+  // ===== 自托管更新（博客通用清单接口） =====
+  // check/download/install 由 updateService 注册；这里保留版本查询与状态广播入口。
   ipcMain.handle('get-app-version', () => app.getVersion());
-  // 更新状态广播给渲染层（主窗口 / 设置窗口）
-  ipcMain.on('update-listen', (e) => {
-    // 客户端注册监听后立即回一条当前状态（无状态则忽略）
-    if (e.sender) e.sender.send('update-status', { state: 'listening' });
-  });
 
   // 主窗口尺寸预设（设置页「外观 → 窗口比例」）
   ipcMain.on('set-window-size', (_e, key, size) => {
@@ -1537,66 +1532,22 @@ function registerIpc() {
   });
 }
 
-// ======= 自动更新（GitHub Releases） =======
-// electron-updater 仅在生产打包后生效；开发模式（npm start）自动跳过，避免报错。
-let updateChecking = false; // 避免重复检查
-
+// ======= 自托管更新状态广播 =======
 /** 把更新状态广播给所有窗口（主窗口 / 设置窗口） */
 function broadcastUpdate(payload) {
   const targets = [mainWindow, settingsWindow].filter((w) => w && !w.isDestroyed());
   for (const w of targets) w.webContents.send('update-status', payload);
 }
 
-function setupAutoUpdater() {
-  autoUpdater.autoDownload = true; // 发现新版自动下载（下载完再询问安装）
+/** 启动后自动检查一次；用户可在设置页修改更新源并手动检查 */
+function startAutoUpdateCheck() {
+  updateService.registerUpdateHandlers({ onState: broadcastUpdate });
 
-  autoUpdater.on('checking-for-update', () => {
-    broadcastUpdate({ state: 'checking' });
-  });
-  autoUpdater.on('update-available', (info) => {
-    broadcastUpdate({ state: 'available', version: info && info.version });
-  });
-  autoUpdater.on('update-not-available', () => {
-    broadcastUpdate({ state: 'up-to-date' });
-  });
-  autoUpdater.on('download-progress', (p) => {
-    broadcastUpdate({ state: 'downloading', percent: Math.round(p.percent || 0) });
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    broadcastUpdate({ state: 'downloaded', version: info && info.version });
-  });
-  autoUpdater.on('error', (err) => {
-    console.error('[updater] 错误：', err && err.message);
-    broadcastUpdate({ state: 'error', message: err && err.message });
-  });
-}
-
-/** 触发检查更新（供启动 / 设置窗口按钮调用） */
-async function checkForUpdates(notifyUpToDate) {
-  if (updateChecking) return { ok: false, reason: 'checking' };
-  if (!app.isPackaged) {
-    // 开发模式：electron-updater 需要打包后的 app-update.yml，直接跳过
-    if (notifyUpToDate) broadcastUpdate({ state: 'dev-mode' });
-    return { ok: false, reason: 'dev-mode' };
-  }
-  updateChecking = true;
-  try {
-    const result = await autoUpdater.checkForUpdates();
-    updateChecking = false;
-    return { ok: true, updateInfo: result && result.updateInfo };
-  } catch (err) {
-    updateChecking = false;
-    console.error('[updater] 检查失败：', err && err.message);
-    return { ok: false, error: err && err.message };
-  }
-}
-
-/** 下载完成后安装并重启（先保存再退出） */
-function installUpdate() {
-  if (!app.isPackaged) return { ok: false, reason: 'dev-mode' };
-  isQuitting = true;
-  autoUpdater.quitAndInstall();
-  return { ok: true };
+  setTimeout(() => {
+    loadSettings()
+      .then((s) => updateService.check(s.updateUrl || DEFAULT_UPDATE_URL))
+      .catch((err) => console.error('[update] 自动检查失败：', err && err.message));
+  }, 1200);
 }
 
 // 单实例锁定：打包后点击图标重复启动时，聚焦已有窗口而非开第二个
@@ -1622,17 +1573,12 @@ app.whenReady().then(() => {
   registerIpc();
   createWindow();
   createTray();
-  setupAutoUpdater();
+  startAutoUpdateCheck();
   // 启动全局键盘监听进程（常驻；Add-Type 首次编译需数秒，提前启动避免 mini 时才编译）
   startKeyMonitor();
 
   // 同步开机自启设置到系统（默认关闭；设置开启时写入注册表）
   loadSettings().then((s) => syncAutoStart(!!s.autoStart)).catch(() => {});
-
-  // 启动后延迟几秒再检查更新，避免拖慢首次启动
-  setTimeout(() => {
-    checkForUpdates(false);
-  }, 5000);
 
   app.on('activate', () => {
     if (!mainWindow || mainWindow.isDestroyed()) {

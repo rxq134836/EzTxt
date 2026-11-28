@@ -28,7 +28,12 @@
   const appVersionEl = $('#appVersion');
   const latestVersionEl = $('#latestVersion');
   const btnCheckUpdate = $('#btnCheckUpdate');
+  const btnDownloadUpdate = $('#btnDownloadUpdate');
   const btnInstallUpdate = $('#btnInstallUpdate');
+  const updateProgressBlock = $('#updateProgressBlock');
+  const updateProgressBar = $('#updateProgressBar');
+  const updateProgressText = $('#updateProgressText');
+  const updateNotesEl = $('#updateNotes');
   const updateStatusEl = $('#updateStatus');
   const fontSizeSliderEl = $('#fontSizeSlider');
   const fontSizeValueEl = $('#fontSizeValue');
@@ -40,7 +45,7 @@
   const shortcutListEl = $('#shortcutList');
   const winClose = $('#winClose');
 
-  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', miniBallGif: 'remi', autoStart: false, shortcuts: {} };
+  let settings = { theme: 'amber', material: 'opaque', acrylicBlur: 40, bgImage: null, bgOpacity: 0.35, fontSize: 13, closeAction: 'tray', windowSize: 'default', customWindowSize: { width: 560, height: 620 }, miniBallStyle: 'classic', miniBallGif: 'remi', autoStart: false, updateUrl: 'https://www.andingsi.cn/api/release/1', shortcuts: {} };
   let isLoadingSettings = false;
   let capturingShortcut = null;
 
@@ -986,71 +991,125 @@
   function onImportBackup() {
     openImportBackupConfirm();
   }
-  // ===== 软件更新 =====
+  // ===== 软件更新（与 FlowSpec 同一套自托管更新状态机）=====
+  const DEFAULT_UPDATE_URL = 'https://www.andingsi.cn/api/release/1';
+  let updateUrl = DEFAULT_UPDATE_URL;
+  let updater = { phase: 'idle', info: null, progress: null, error: '', installerPath: '' };
+  let stopProgressListener = null;
+
+  function applyUpdaterState(patch) {
+    updater = { ...updater, ...(patch || {}) };
+    const phase = updater.phase;
+    const info = updater.info || {};
+    const percent = updater.progress ? (updater.progress.percent || 0) : 0;
+
+    btnCheckUpdate.disabled = phase === 'checking' || phase === 'downloading';
+    btnCheckUpdate.textContent = phase === 'checking' ? '检查中…' : '检查更新';
+    btnDownloadUpdate.classList.toggle('hidden', phase !== 'available');
+    btnDownloadUpdate.textContent = '下载 v' + (info.version || '');
+    btnInstallUpdate.classList.toggle('hidden', phase !== 'ready');
+
+    updateProgressBlock.classList.toggle('hidden', phase !== 'downloading');
+    updateProgressBar.style.width = percent + '%';
+    updateProgressText.textContent = '下载中 ' + percent + '%';
+
+    latestVersionEl.textContent = info.version ? 'v' + info.version : '—';
+    const notes = phase === 'available' && info.notes ? info.notes : '';
+    updateNotesEl.textContent = notes;
+    updateNotesEl.classList.toggle('hidden', !notes);
+
+    const statusMap = {
+      idle: '—',
+      checking: '正在检查更新…',
+      latest: '已是最新版本。',
+      available: '发现新版本 v' + (info.version || '') + '，点击下载。',
+      downloading: '正在下载更新…',
+      ready: '安装包已下载并校验通过，点击「安装并重启」完成更新。',
+      installing: '正在启动安装程序…',
+      error: '更新失败：' + (updater.error || '未知错误')
+    };
+    updateStatusEl.textContent = statusMap[phase] || '—';
+  }
+
   async function initUpdateUI() {
     try {
       const v = await api.getAppVersion();
       if (v) appVersionEl.textContent = 'v' + v;
     } catch (_) {}
+    // 更新源内置，不在界面展示；仍从设置读取，便于以后配置而不改代码
+    try {
+      const s = await api.loadSettings();
+      updateUrl = s.updateUrl || DEFAULT_UPDATE_URL;
+    } catch (_) {
+      updateUrl = DEFAULT_UPDATE_URL;
+    }
+    // 启动自动检查的结果先恢复，随后继续接收主进程广播
+    try {
+      const state = await api.getUpdateState?.();
+      if (state && state.phase && state.phase !== 'idle') applyUpdaterState(state);
+    } catch (_) {}
+    if (api.onUpdateStatus) {
+      api.onUpdateStatus((payload) => {
+        if (payload && typeof payload.phase === 'string') applyUpdaterState(payload);
+      });
+    }
   }
 
   async function onCheckUpdate() {
-    updateStatusEl.textContent = '正在检查更新…';
-    btnCheckUpdate.disabled = true;
+    applyUpdaterState({ phase: 'checking', error: '' });
     try {
-      const res = await api.checkUpdate(true);
-      if (res && res.ok === false) {
-        if (res.reason === 'dev-mode') updateStatusEl.textContent = '开发模式下不支持检查更新（打包后可用）';
-        else if (res.reason === 'checking') updateStatusEl.textContent = '正在检查更新…';
-        else updateStatusEl.textContent = '检查失败：' + (res.error || '未知错误');
+      const res = await api.checkForUpdate(updateUrl);
+      if (!res || res.ok === false) {
+        applyUpdaterState({ phase: 'error', info: null, error: res?.error || '未知错误' });
+      } else {
+        applyUpdaterState({ phase: res.available ? 'available' : 'latest', info: res, error: '' });
       }
-      // 具体状态由 onUpdateStatus 更新（available / up-to-date / downloading / downloaded / error）
     } catch (err) {
-      updateStatusEl.textContent = '检查失败：' + (err && err.message ? err.message : String(err));
-    } finally {
-      btnCheckUpdate.disabled = false;
+      applyUpdaterState({ phase: 'error', error: err && err.message ? err.message : String(err) });
     }
   }
 
-  /** 更新状态回调（主进程广播） */
-  function onUpdateStatus(payload) {
-    if (!payload) return;
-    const s = payload.state;
-    if (s === 'checking') {
-      updateStatusEl.textContent = '正在检查更新…';
-    } else if (s === 'available') {
-      latestVersionEl.textContent = 'v' + (payload.version || '?');
-      updateStatusEl.textContent = '发现新版本 v' + (payload.version || '') + '，正在下载…';
-    } else if (s === 'downloading') {
-      updateStatusEl.textContent = '正在下载更新：' + (payload.percent || 0) + '%';
-    } else if (s === 'downloaded') {
-      latestVersionEl.textContent = 'v' + (payload.version || '?');
-      updateStatusEl.textContent = '新版本已下载，点击「立即重启安装」完成更新。';
-      btnInstallUpdate.classList.remove('hidden');
-    } else if (s === 'up-to-date') {
-      updateStatusEl.textContent = '已是最新版本。';
-    } else if (s === 'dev-mode') {
-      updateStatusEl.textContent = '开发模式下不支持检查更新（打包后可用）';
-    } else if (s === 'error') {
-      updateStatusEl.textContent = '更新失败：' + (payload.message || '未知错误');
-    } else if (s === 'listening') {
-      // 刚注册监听，无需处理
-    }
-  }
-
-  function onInstallUpdate() {
+  async function onDownloadUpdate() {
+    const info = updater.info;
+    if (!info || !info.baseUrl || !info.file || !info.sha256) return;
+    applyUpdaterState({ phase: 'downloading', progress: { received: 0, total: 0, percent: 0 }, error: '' });
+    stopProgressListener?.();
+    stopProgressListener = api.onUpdateProgress?.((progress) => {
+      if (updater.phase === 'downloading') applyUpdaterState({ progress });
+    });
     try {
-      api.installUpdate();
-    } catch (_) {}
+      const res = await api.downloadUpdate({ baseUrl: info.baseUrl, file: info.file, sha256: info.sha256 });
+      if (!res || res.ok === false) {
+        applyUpdaterState({ phase: 'error', error: res?.error || '下载失败' });
+      } else {
+        applyUpdaterState({ phase: 'ready', installerPath: res.filePath, progress: null });
+      }
+    } catch (err) {
+      applyUpdaterState({ phase: 'error', error: err && err.message ? err.message : String(err) });
+    } finally {
+      stopProgressListener?.();
+      stopProgressListener = null;
+    }
+  }
+
+  async function onInstallUpdate() {
+    if (!updater.installerPath) return;
+    applyUpdaterState({ phase: 'installing' });
+    try {
+      const res = await api.installUpdate(updater.installerPath);
+      if (!res || res.ok === false) {
+        applyUpdaterState({ phase: 'ready', error: res?.error || '安装程序启动失败' });
+      }
+    } catch (err) {
+      applyUpdaterState({ phase: 'ready', error: err && err.message ? err.message : String(err) });
+    }
   }
 
   // ===== 事件 =====
   winClose.addEventListener('click', () => window.close());
   btnCheckUpdate.addEventListener('click', onCheckUpdate);
+  btnDownloadUpdate.addEventListener('click', onDownloadUpdate);
   btnInstallUpdate.addEventListener('click', onInstallUpdate);
-  if (api.onUpdateStatus) {
-    api.onUpdateStatus(onUpdateStatus);
-  }
   initUpdateUI();
   materialOptionsEl.addEventListener('click', (e) => {
     const btn = e.target.closest('.material-btn');

@@ -1524,12 +1524,60 @@ body[data-material="acrylic"] .settings-window {
   font-size: calc(var(--font-size) - 2px);
   color: var(--ink-mute);
 }
-/* 软件更新：按钮行 */
+/* 软件更新：按钮行 / 下载进度（更新源内置，不在界面展示） */
 .update-actions {
   display: flex;
   gap: 8px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
+.update-progress { margin-top: 8px; }
+.update-progress-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+.update-progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width 0.15s linear;
+}
+#btnDownloadUpdate { border-color: var(--accent); color: var(--accent); }
+#btnInstallUpdate { border-color: var(--accent); color: var(--accent); }
+
+/* 主窗口：发现新版本的轻提示 */
+.update-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 36px;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 32px);
+  padding: 7px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 18px;
+  background: var(--bg-solid);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  font-size: calc(var(--font-size) - 1px);
+  color: var(--ink);
+}
+.update-toast-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.update-toast button {
+  flex: 0 0 auto;
+  border: none;
+  background: var(--accent);
+  color: var(--bg-solid);
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: calc(var(--font-size) - 2px);
+  cursor: pointer;
+}
+.update-toast button:last-child { background: transparent; color: var(--ink-mute); font-size: var(--font-size); padding: 0 2px; }
 
 /* —— 设置项（外观：主题 / 字体 / 背景） —— */
 .settings-block {

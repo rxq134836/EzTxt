@@ -243,6 +243,16 @@ npm run dist:nsis      # 仅 NSIS 安装包
 
 > 卸载时：安装版会通过自定义 NSIS 脚本结束运行中的进程、清理缓存目录（Cache / logs 等），**保留待办数据**（`storage` 目录）。
 
+### 发版与自动更新
+
+EzTxt 与 FlowSpec 使用同一套**博客后台通用版本发布机制**，不再依赖 GitHub Releases / electron-updater：
+
+1. `npm run dist:nsis` 打包，产物在 `dist/EzTxt-<version>-x64.exe`。
+2. 登录博客后台 → 工具管理 → EzTxt → 编辑版本：版本号填**纯数字三段式**（如 `1.0.3`，不要带 `v`），上传上一步的 `.exe` 安装包并保存。服务端自动计算 sha256，只保留最新包。
+3. 客户端启动 1.2 秒后自动检查一次；设置页「软件更新」可手动检查、下载并安装。更新源地址内置，不在界面展示：`https://www.andingsi.cn/api/release/1`（写在 `src/main.js` 的 `DEFAULT_UPDATE_URL` 与默认设置里）。
+
+更新契约：`GET /api/release/1/latest.json` 返回 `{ version, file, sha256, notes, publishedAt }`，安装包由 `${baseUrl}/${file}` 下载。下载采用空闲超时（连续 60 秒没有数据才判超时，总上限 15 分钟），sha256 校验通过后才启动安装程序。
+
 ---
 
 ## 🗓️ 更新记录

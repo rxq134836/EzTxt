@@ -231,10 +231,17 @@
             <span class="settings-label">最新版本</span>
             <span class="settings-value" id="latestVersion">—</span>
           </div>
+          <p class="storage-hint">博客后台发布新版本后自动检测，也可以手动检查。</p>
           <div class="update-actions">
             <button class="tb-btn" id="btnCheckUpdate" type="button">检查更新</button>
-            <button class="tb-btn hidden" id="btnInstallUpdate" type="button">立即重启安装</button>
+            <button class="tb-btn hidden" id="btnDownloadUpdate" type="button">下载</button>
+            <button class="tb-btn hidden" id="btnInstallUpdate" type="button">安装并重启</button>
           </div>
+          <div class="update-progress hidden" id="updateProgressBlock">
+            <div class="update-progress-track"><div class="update-progress-fill" id="updateProgressBar"></div></div>
+            <p class="storage-hint" id="updateProgressText">下载中 0%</p>
+          </div>
+          <p class="storage-hint hidden" id="updateNotes"></p>
           <p class="storage-hint" id="updateStatus">—</p>
         </div>
       </section>
